@@ -19,6 +19,7 @@ def make_src_tokenizer(srcs, vocab_size, show_progress=False):
     trainer = BpeTrainer(
         vocab_size=vocab_size, show_progress=show_progress, special_tokens=['[PAD]', '[UNK]', '[BOS]', '[EOS]']
     )
+    tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
     tokenizer.post_processor = TemplateProcessing(
         single='[BOS] $A [EOS]',
         special_tokens=[('[BOS]', 2), ('[EOS]', 3)]
@@ -137,7 +138,7 @@ def bucket_collate_fn(sequences, batch_first=False, padding_value=0.0, padding_s
         return tuple(map(pad_sequence, zip(*sequences)))
     
 def check_make_srcs_tokenizer():
-    VOCABULARY_SIZE = 20000
+    VOCABULARY_SIZE = 50000
 
     script_dir_path = os.path.dirname(__file__)
     dataset_file_path = os.path.join(script_dir_path, 'dataset/train')
@@ -167,7 +168,7 @@ def check_make_srcs_tokenizer():
         print('-' * 10)
         
 def check_make_dists_tokenizer():
-    VOCABULARY_SIZE = 20000
+    VOCABULARY_SIZE = 50000
 
     script_dir_path = os.path.dirname(__file__)
     dataset_file_path = os.path.join(script_dir_path, 'dataset/train')
@@ -267,5 +268,5 @@ def check_bucket_sampler():
 if __name__ == '__main__':
     check_make_dists_tokenizer()
     check_make_srcs_tokenizer()
-    check_alien_dataset()
-    check_bucket_sampler()
+    # check_alien_dataset()
+    # check_bucket_sampler()
