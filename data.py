@@ -8,10 +8,10 @@ from tokenizers.models import BPE
 from tokenizers.trainers import BpeTrainer
 from tokenizers.processors import TemplateProcessing
 import torch
-from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import Sampler
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
+from torch.nn.utils.rnn import pad_sequence
 from torchvision.transforms import Lambda
 
 def make_src_tokenizer(srcs, vocab_size, show_progress=False):
@@ -78,7 +78,7 @@ class AlienDataset(Dataset):
     def __getitem__(self, idx):
         src = self.srcs[idx]
         if self.src_transform:
-                src = self.src_transform(src)
+            src = self.src_transform(src)
     
         if self.subsampling == 'test':
             return src
@@ -131,11 +131,13 @@ class BucketSampler(Sampler):
 
         return list(buckets.values())
     
-def bucket_collate_fn(sequences, batch_first=False, padding_value=0.0, padding_side='right', is_test=True):
+def bucket_collate_fn(sequences, padding_value=0.0, padding_side='right', is_test=True):
     if is_test:
-        return pad_sequence(sequences, batch_first=batch_first, padding_value=padding_value, padding_side=padding_side)
+        return pad_sequence(sequences, batch_first=True, padding_value=padding_value, padding_side=padding_side)
     else:
-        return tuple(map(pad_sequence, zip(*sequences)))
+        pad_sequence_ = \
+            (lambda sequences : pad_sequence(sequences, batch_first=True, padding_value=padding_value, padding_side=padding_side))
+        return tuple(map(pad_sequence_, zip(*sequences)))
     
 def check_make_srcs_tokenizer():
     VOCABULARY_SIZE = 50000
@@ -143,14 +145,14 @@ def check_make_srcs_tokenizer():
     script_dir_path = os.path.dirname(__file__)
     dataset_file_path = os.path.join(script_dir_path, 'dataset/train')
 
+    save_dir_path = os.path.join(script_dir_path, 'saved')
+    save_tokenizer_file_path = os.path.join(save_dir_path, 'src-tokenizer.json')
+
     srcs = []
     with open(dataset_file_path, 'r') as data_file:
         for line in data_file:
             line_data = json.loads(line)
             srcs.append(line_data['src'])   
-
-    save_dir_path = os.path.join(script_dir_path, 'saved')
-    save_tokenizer_file_path = os.path.join(save_dir_path, 'src-tokenizer.json')
 
     tokenizer = None
     if os.path.isfile(save_tokenizer_file_path):
@@ -173,14 +175,15 @@ def check_make_dists_tokenizer():
     script_dir_path = os.path.dirname(__file__)
     dataset_file_path = os.path.join(script_dir_path, 'dataset/train')
 
+    save_dir_path = os.path.join(script_dir_path, 'saved')
+    save_tokenizer_file_path = os.path.join(save_dir_path, 'dst-tokenizer.json')
+
     dsts = []
     with open(dataset_file_path, 'r') as data_file:
         for line in data_file:
             line_data = json.loads(line)
             dsts.append(line_data['dst'])   
 
-    save_dir_path = os.path.join(script_dir_path, 'saved')
-    save_tokenizer_file_path = os.path.join(save_dir_path, 'dst-tokenizer.json')
     if os.path.isfile(save_tokenizer_file_path):
         tokenizer = Tokenizer.from_file(save_tokenizer_file_path)
     else:
@@ -200,10 +203,11 @@ def check_alien_dataset():
     SUBSAMPLING = 'train'
 
     script_dir_path = os.path.dirname(__file__)
-    dataset_dir_path = os.path.join(script_dir_path, 'dataset')
     saved_dir_path = os.path.join(script_dir_path, 'saved')
     saved_src_tokenizer_file_path = os.path.join(saved_dir_path, 'src-tokenizer.json')
     saved_dst_tokenizer_file_path = os.path.join(saved_dir_path, 'dst-tokenizer.json')
+
+    dataset_dir_path = os.path.join(script_dir_path, 'dataset')
 
     src_tokenizer = Tokenizer.from_file(saved_src_tokenizer_file_path)
     dst_tokenizer = Tokenizer.from_file(saved_dst_tokenizer_file_path)
@@ -245,7 +249,8 @@ def check_bucket_sampler():
     dataset = AlienDataset(dataset_dir_path, subsampling=SUBSAMPLING, 
                            src_transform=src_transform, dst_transform=dst_transform)
 
-    batch_sampler = BucketSampler(dataset, is_test=(SUBSAMPLING == 'test'), batch_size=BATCH_SIZE, bucket_size=BUCKET_SIZE, shuffle=SHUFFLE)
+    batch_sampler = BucketSampler(dataset, is_test=(SUBSAMPLING == 'test'), 
+                                  batch_size=BATCH_SIZE, bucket_size=BUCKET_SIZE, shuffle=SHUFFLE)
     collate_fn = (lambda sequences : bucket_collate_fn(sequences, is_test=(SUBSAMPLING == 'test')))
     dataloader = DataLoader(dataset, batch_sampler=batch_sampler, collate_fn=collate_fn)
 
@@ -268,5 +273,5 @@ def check_bucket_sampler():
 if __name__ == '__main__':
     check_make_dists_tokenizer()
     check_make_srcs_tokenizer()
-    # check_alien_dataset()
-    # check_bucket_sampler()
+    check_alien_dataset()
+    check_bucket_sampler()
