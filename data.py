@@ -18,15 +18,15 @@ from torchvision.transforms import Lambda
 
 def make_src_tokenizer(srcs: list[str], vocab_size: int, show_progress: bool = False):
     """
-    Make BPE tokenizer for strings that shall be translated.
+    Makes BPE tokenizer for strings to be translated.
 
     Args:
-        srcs (list[str]): A list of strings that shall be translated.
-        vocab_size (int): Number of tokens to generate.
+        srcs (list[str]): A list of strings to be translated.
+        vocab_size (int): The size of the final vocabulary, including all tokens and alphabet.
         show_progress (bool, optional): Whether to show progress bars while training.
 
     Returns:
-        tokenizers.Tokenizer: Tokenizer for strings that shall be translated.
+        tokenizers.Tokenizer
     """
 
     tokenizer = Tokenizer(BPE(unk_token='[UNK]'))
@@ -45,15 +45,15 @@ def make_src_tokenizer(srcs: list[str], vocab_size: int, show_progress: bool = F
 
 def make_dst_tokenizer(dsts: list[str], vocab_size: int, show_progress: bool = False):
     """
-    Make tokenizer for translation strings.
+    Makes BPE tokenizer for translation strings.
 
     Args:
-        dst (list[str]): A list of translation strings.
-        vocab_size (int): Number of tokens to generate.
+        dsts (list[str]): A list of translation strings.
+        vocab_size (int): The size of the final vocabulary, including all tokens and alphabet.
         show_progress (bool, optional): Whether to show progress bars while training.
 
     Returns:
-        tokenizers.Tokenizer: Tokenizer for translation strings.
+        tokenizers.Tokenizer
     """
 
     tokenizer = Tokenizer(BPE(unk_token='[UNK]'))
@@ -74,19 +74,19 @@ def make_dst_tokenizer(dsts: list[str], vocab_size: int, show_progress: bool = F
     return tokenizer
 
 class AlienDataset(Dataset):
-    """Dataset class which loads Alien dataset."""
+    """Dataset class that loads Alien dataset."""
 
     def __init__(
             self, dataset_dir_path: str, subset: str = 'test', 
             src_transform: Callable[[str], any] = None, dst_transform: Callable[[str], any] = None
     ):
         """
-        Initializes the class with the given parameters. Loads the dataset.
+        Loads the dataset.
 
         Args:
             dataset_dir_path (str): Path to Alien dataset directory.
             subset (str, optional): Can take values "train", "val" and "test" depending on the subset you want to load. Defaults to "test". 
-            src_transform (Callable[[str], any], optional): Transformation of string that shall be translated. Defaults to None. 
+            src_transform (Callable[[str], any], optional): Transformation of string to be translated. Defaults to None. 
             dst_transform (Callable[[str], any], optional): Transformation of translation string. Defaults to None.
 
         Raises:
@@ -134,21 +134,28 @@ class AlienDataset(Dataset):
             return src, dst
         
 class BucketSampler(Sampler):
-    """Batch sampler that puts in one batch only sequences in the same length bucket."""
+    """
+    Batch sampler that puts in the same batch only sequences in the same bucket.
+    
+    All the sequences are divided into buckets. Two sequences are in the same bucket 
+    if their lengths are within the range of the bucket. Two sequences from different buckets 
+    can't be in the same batch though if two sequences are in the same bucket doesn't necessary mean 
+    they end up in the same batch.
+    """
 
     def __init__(
-        self, dataset: Dataset, is_test, 
+        self, dataset: Dataset, is_test: bool, 
         batch_size: int = 64, bucket_size: int = 5, shuffle: bool = False
     ):
         """
-        Initializes the class with the given parameters. Analizes given dataset to generate correct batches.
+        Generates buckets.
 
         Args:
             dataset (Dataset): Dataset from which we want to sample.
             is_test (bool): Whether the dataset subset is test or not.
             batch_size (int, optional): Batch size. Defaults to 64.
-            bucket_size (int, optional): Size of a single bucket.
-            shuffle (bool, optional): If True shuffles the dataset. Defaults to False.
+            bucket_size (int, optional): Size of range of a single bucket.
+            shuffle (bool, optional): Whether to shuffle the dataset. Defaults to False.
         """
 
         self.dataset = dataset
@@ -179,7 +186,7 @@ class BucketSampler(Sampler):
     def __len__(self):
         return self.length
 
-    def _make_buckets(self, bucket_size):
+    def _make_buckets(self, bucket_size: int):
         buckets = {}
         for idx, seq in enumerate(self.dataset):
             if not self.is_test:
@@ -193,15 +200,15 @@ class BucketSampler(Sampler):
     
 def bucket_collate_fn(
     sequences: list[Union[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]], is_test: bool, 
-    padding_value: float = 0, padding_side: str = 'right'
+    padding_value: int = 0, padding_side: str = 'right'
 ):
     """
-    Turn a list of sequences into a single batch. 
+    Turns a list of sequences into a single batch. 
 
     Args:
-        sequences list[Union[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]]: List of variable length sequences or list of tuples of two variable length sequences.
-        is_test (bool): Whether sequences is a list of sequences or a list of tuples. 
-        padding_value (float, optional): Value for padded elements. Defaults to 0.
+        sequences (list[Union[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]]): List of variable length sequences or a list of tuples of two variable length sequences.
+        is_test (bool): Whether "sequences" is a list of sequences or a list of tuples. 
+        padding_value (int, optional): Value for padded elements. Defaults to 0.
         padding_side (str, optional): The side to pad the sequences on. Defaults to "right".
 
     Returns:
@@ -276,7 +283,7 @@ def check_make_dists_tokenizer():
 
 def check_alien_dataset():
     NUM_TEXTS = 10
-    SUBSAMPLING = 'train'
+    SUBSET = 'train'
 
     script_dir_path = os.path.dirname(__file__)
     saved_dir_path = os.path.join(script_dir_path, 'saved')
@@ -291,10 +298,10 @@ def check_alien_dataset():
     src_transform = Lambda(lambda src : src_tokenizer.encode(src).tokens)
     dst_transform = Lambda(lambda dst : dst_tokenizer.encode(dst).tokens)
 
-    dataset = AlienDataset(dataset_dir_path, subset=SUBSAMPLING, 
+    dataset = AlienDataset(dataset_dir_path, subset=SUBSET, 
                            src_transform=src_transform, dst_transform=dst_transform)
     for idx in range(NUM_TEXTS):
-        if SUBSAMPLING == 'test':
+        if SUBSET == 'test':
             src = dataset[idx]
             print(src)
         else:
@@ -304,7 +311,7 @@ def check_alien_dataset():
         print('-' * 10)
 
 def check_bucket_sampler():
-    SUBSAMPLING = 'test'
+    SUBSET = 'test'
     BATCH_SIZE = 4
     BUCKET_SIZE = 5
     SHUFFLE = False
@@ -322,19 +329,19 @@ def check_bucket_sampler():
     src_transform = Lambda(lambda src : torch.tensor(src_tokenizer.encode(src).ids))
     dst_transform = Lambda(lambda dst : torch.tensor(dst_tokenizer.encode(dst).ids))
 
-    dataset = AlienDataset(dataset_dir_path, subset=SUBSAMPLING, 
+    dataset = AlienDataset(dataset_dir_path, subset=SUBSET, 
                            src_transform=src_transform, dst_transform=dst_transform)
 
-    batch_sampler = BucketSampler(dataset, is_test=(SUBSAMPLING == 'test'), 
+    batch_sampler = BucketSampler(dataset, is_test=(SUBSET == 'test'), 
                                   batch_size=BATCH_SIZE, bucket_size=BUCKET_SIZE, shuffle=SHUFFLE)
-    collate_fn = (lambda sequences : bucket_collate_fn(sequences, is_test=(SUBSAMPLING == 'test')))
+    collate_fn = (lambda sequences : bucket_collate_fn(sequences, is_test=(SUBSET == 'test')))
     dataloader = DataLoader(dataset, batch_sampler=batch_sampler, collate_fn=collate_fn)
 
     for count, batch in enumerate(dataloader):
         if count == NUM_BATCHES:
             break
 
-        if SUBSAMPLING == 'test':
+        if SUBSET == 'test':
             print(batch)
             print(batch.shape)
         else:
@@ -351,7 +358,7 @@ if __name__ == '__main__':
     check_make_dists_tokenizer()
     print('Check make srcs_tokenizer:')
     check_make_srcs_tokenizer()
-    print('Check alien_dataset:')
+    print('Check AlienDataset:')
     check_alien_dataset()
     print('Check bucket_sampler:')
     check_bucket_sampler()
