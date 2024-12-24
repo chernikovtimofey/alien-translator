@@ -223,6 +223,8 @@ def bucket_collate_fn(
         return tuple(map(pad_sequence_, zip(*sequences)))
     
 def check_make_srcs_tokenizer():
+    print('Check make srcs_tokenizer:')
+
     VOCABULARY_SIZE = 50000
 
     script_dir_path = os.path.dirname(__file__)
@@ -253,6 +255,8 @@ def check_make_srcs_tokenizer():
         print('-' * 10)
         
 def check_make_dists_tokenizer():
+    print('Check make_dists_tokenizer:')
+
     VOCABULARY_SIZE = 50000
 
     script_dir_path = os.path.dirname(__file__)
@@ -282,6 +286,8 @@ def check_make_dists_tokenizer():
         print('-' * 10)
 
 def check_alien_dataset():
+    print('Check AlienDataset:')
+
     NUM_TEXTS = 10
     SUBSET = 'train'
 
@@ -311,6 +317,8 @@ def check_alien_dataset():
         print('-' * 10)
 
 def check_bucket_sampler():
+    print('Check bucket_sampler:')
+    
     SUBSET = 'test'
     BATCH_SIZE = 4
     BUCKET_SIZE = 5
@@ -354,11 +362,7 @@ def check_bucket_sampler():
             print('-' * 10)
 
 if __name__ == '__main__':
-    print('Check make_dists_tokenizer:')
     check_make_dists_tokenizer()
-    print('Check make srcs_tokenizer:')
     check_make_srcs_tokenizer()
-    print('Check AlienDataset:')
     check_alien_dataset()
-    print('Check bucket_sampler:')
     check_bucket_sampler()

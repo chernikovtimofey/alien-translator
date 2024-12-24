@@ -341,6 +341,8 @@ def predict(
             )['sequences']
 
 def check_positional_encoder():
+    print('Check PositionalEcoder:')
+
     DROPOUT_P = 0
     BATCH_SIZE = 2
     SEQ_LEN = 5
@@ -365,6 +367,8 @@ def check_positional_encoder():
                 print('-' * 10)
 
 def check_my_transformer():
+    print('Check MyTransformer:')
+
     SUBSET = 'val'
     VOCABULARY_SIZE = 50000
 
@@ -407,6 +411,8 @@ def check_my_transformer():
     print(out.shape)
 
 def check_train_loop():
+    print('Check train_loop:')
+
     VOCABULARY_SIZE = 50000
     D_MODEL = 32
     N_HEAD = 1
@@ -415,8 +421,10 @@ def check_train_loop():
     DIM_FEEDFORWARD = 128
     DROPOUT = 0
 
+    NUM_SAMPLES = 30
+
     LEARNING_RATE = 0.01
-    EPOCHS = 100
+    NUM_EPOCHS = 100
 
     script_dir_path = os.path.dirname(__file__)
 
@@ -435,10 +443,10 @@ def check_train_loop():
 
     dataset = AlienDataset(dataset_dir_path, subset='train',
                            src_transform=src_transform, dst_transform=dst_transform)
-    dataset = Subset(dataset, range(10))
+    dataset = Subset(dataset, range(NUM_SAMPLES))
 
     collate_fn = (lambda sequences : bucket_collate_fn(sequences, is_test=False))
-    dataloader = DataLoader(dataset, batch_size=10, shuffle=True, collate_fn=collate_fn)
+    dataloader = DataLoader(dataset, batch_size=NUM_SAMPLES, shuffle=True, collate_fn=collate_fn)
 
     model = MyTransformer(
         VOCABULARY_SIZE, VOCABULARY_SIZE,
@@ -454,7 +462,7 @@ def check_train_loop():
 
         loss_fn = nn.CrossEntropyLoss()
 
-        for epoch in range(1, EPOCHS + 1):
+        for epoch in range(1, NUM_EPOCHS + 1):
             train_loss = train_loop(model, dataloader, optimizer, loss_fn, verbose=False)
 
             print(f'Epoch {epoch:3} training loss: {train_loss:.4f}')
@@ -473,8 +481,11 @@ def check_train_loop():
             for (dst, pred) in zip(dsts, preds):
                 print('actural translation:', dst_tokenizer.decode(dst.tolist()))
                 print('model translation:', dst_tokenizer.decode(pred.tolist()))
+                print('-' * 10)
 
 def check_predict():
+    print('Check predict:')
+
     VOCABULARY_SIZE = 50000
     D_MODEL = 32
     N_HEAD = 1
@@ -483,15 +494,14 @@ def check_predict():
     DIM_FEEDFORWARD = 128
     DROPOUT = 0
 
-    LEARNING_RATE = 0.01
-    EPOCHS = 100
+    NUM_SAMPLES = 100
 
     script_dir_path = os.path.dirname(__file__)
 
     save_dir_path = os.path.join(script_dir_path, 'saved')
     save_src_tokenizer_file_path = os.path.join(save_dir_path, 'src-tokenizer.json')
     save_dst_tokenizer_file_path = os.path.join(save_dir_path, 'dst-tokenizer.json')
-    save_simple_model_weights_file_path = os.path.join(save_dir_path, 'simple_model_weights.pth')
+    save_model_weights_file_path = os.path.join(save_dir_path, 'simple_model_weights.pth')
 
     dataset_dir_path = os.path.join(script_dir_path, 'dataset')
 
@@ -503,10 +513,10 @@ def check_predict():
 
     dataset = AlienDataset(dataset_dir_path, subset='train',
                            src_transform=src_transform, dst_transform=dst_transform)
-    dataset = Subset(dataset, range(10))
+    dataset = Subset(dataset, range(NUM_SAMPLES))
 
     collate_fn = (lambda sequences : bucket_collate_fn(sequences, is_test=False))
-    dataloader = DataLoader(dataset, batch_size=10, shuffle=True, collate_fn=collate_fn)
+    dataloader = DataLoader(dataset, batch_size=NUM_SAMPLES, shuffle=True, collate_fn=collate_fn)
 
     model = MyTransformer(
         VOCABULARY_SIZE, VOCABULARY_SIZE,
@@ -515,36 +525,21 @@ def check_predict():
         dim_feedforward=DIM_FEEDFORWARD, dropout=DROPOUT
     )
     
-    if os.path.isfile(save_simple_model_weights_file_path):
-        model.load_state_dict(torch.load(save_simple_model_weights_file_path, weights_only=True))
-    else:
-        optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-
-        loss_fn = nn.CrossEntropyLoss()
-
-        for epoch in range(1, EPOCHS + 1):
-            train_loss = train_loop(model, dataloader, optimizer, loss_fn, verbose=False)
-
-            print(f'Epoch {epoch:3} training loss: {train_loss:.4f}')
-
-        torch.save(model.state_dict(), save_simple_model_weights_file_path)
+    model.load_state_dict(torch.load(save_model_weights_file_path, weights_only=True))
 
     with torch.no_grad():
         collate_fn = (lambda sequences : bucket_collate_fn(sequences, is_test=False)[0])
-        dataloader = DataLoader(dataset, batch_size=10, shuffle=False, collate_fn=collate_fn)
+        dataloader = DataLoader(dataset, batch_size=NUM_SAMPLES, shuffle=False, collate_fn=collate_fn)
 
         preds = next(predict(model, dataloader, num_beams=2))
         for (dst, pred) in zip(dataset, preds):
             dst = dst[1]
             print('actural translation:', dst_tokenizer.decode(dst.tolist()))
             print('model translation:', dst_tokenizer.decode(pred.tolist()))
+            print('-' * 10)
 
 if __name__ == '__main__':
-    print('Check PositionalEcoder:')
     check_positional_encoder()
-    print('Check MyTransformer:')
     check_my_transformer()
-    print('Check train_loop:')
     check_train_loop()
-    print('Check predict:')
     check_predict()
