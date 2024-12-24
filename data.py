@@ -200,7 +200,7 @@ class BucketSampler(Sampler):
     
 def bucket_collate_fn(
     sequences: list[Union[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]], is_test: bool, 
-    padding_value: int = 0, padding_side: str = 'right'
+    padding_value: int = 0
 ):
     """
     Turns a list of sequences into a single batch. 
@@ -216,10 +216,10 @@ def bucket_collate_fn(
     """
 
     if is_test:
-        return pad_sequence(sequences, batch_first=True, padding_value=padding_value, padding_side=padding_side)
+        return pad_sequence(sequences, batch_first=True, padding_value=padding_value)
     else:
         pad_sequence_ = \
-            (lambda sequences : pad_sequence(sequences, batch_first=True, padding_value=padding_value, padding_side=padding_side))
+            (lambda sequences : pad_sequence(sequences, batch_first=True, padding_value=padding_value))
         return tuple(map(pad_sequence_, zip(*sequences)))
     
 def check_make_srcs_tokenizer():
