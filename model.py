@@ -243,7 +243,7 @@ def fit(
     for epoch in range(1, num_epochs + 1):
         print('-' * 25, f'Epoch {epoch}', '-' * 25)
 
-        train_loss = train_loop(model, train_dataloader, optimizer, loss_fn, verbose=verbose, device=device)
+        train_loss = train_loop(model, train_dataloader, optimizer, loss_fn, verbose=verbose)
         torch.save(model.state_dict(), os.path.join(save_dir_path, f'model_weights_{epoch}.pth'))
         train_loss_hist.append(train_loss)
 
