@@ -247,7 +247,7 @@ def fit(
         torch.save(model.state_dict(), os.path.join(save_dir_path, f'model_weights_{epoch}.pth'))
         train_loss_hist.append(train_loss)
 
-        val_loss = validation_loop(model, val_dataloader, loss_fn, device=device)
+        val_loss = validation_loop(model, val_dataloader, loss_fn)
         val_loss_hist.append(val_loss)
 
         if verbose:
