@@ -311,7 +311,7 @@ def predict(
 
                 next_token_scores, next_tokens = torch.topk(
                     next_token_scores, 
-                    num_beams if step == max_length else 2*num_beams, 
+                    2*num_beams, 
                     dim=-1, sorted=False)
 
                 next_indices = next_tokens // vocabulary_size
@@ -494,7 +494,9 @@ def check_predict():
     DIM_FEEDFORWARD = 128
     DROPOUT = 0
 
-    NUM_SAMPLES = 100
+    NUM_SAMPLES = 10
+
+    NUM_BEAMS = 10
 
     script_dir_path = os.path.dirname(__file__)
 
@@ -531,7 +533,7 @@ def check_predict():
         collate_fn = (lambda sequences : bucket_collate_fn(sequences, is_test=False)[0])
         dataloader = DataLoader(dataset, batch_size=NUM_SAMPLES, shuffle=False, collate_fn=collate_fn)
 
-        preds = next(predict(model, dataloader, num_beams=2))
+        preds = next(predict(model, dataloader, num_beams=NUM_BEAMS))
         for (dst, pred) in zip(dataset, preds):
             dst = dst[1]
             print('actural translation:', dst_tokenizer.decode(dst.tolist()))
