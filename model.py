@@ -216,7 +216,7 @@ def validation_loop(model: MyTransformer, dataloader: DataLoader, loss_fn: torch
 def fit(
         model: MyTransformer, train_dataloader: DataLoader, val_dataloader: DataLoader, 
         optimizer: torch.optim.Optimizer, loss_fn: torch.nn.Module, num_epochs: int, 
-        verbose: bool = False, save_dir_path: str = './saved'
+        verbose: bool = False, save_file_path: str = './saved/model_weights.pth'
 ):
     """
     Performs model training on given dataloader.
@@ -228,8 +228,8 @@ def fit(
         optimizer (torch.optim.Optimizer): An optimizer of model's parameters.
         loss_fn (torch.nn.Module): The loss function to compute the training loss.
         num_epochs (int): Number of epochs to perform.
-        verbose (bool): Whether to show the training process.
-        save_dir_path (str): A dir path to save model parameters after every epoch.
+        verbose (bool, optional): Whether to show the training process. Defaults to False.
+        save_file_path (str, optional): A file path to save model parameters after every epoch. Defaults to './saved/model_weights.pth'.
 
     Returns:
         Tuple[List[float], List[float]]: Training loss history and validation loss history.
@@ -244,7 +244,7 @@ def fit(
         print('-' * 25, f'Epoch {epoch}', '-' * 25)
 
         train_loss = train_loop(model, train_dataloader, optimizer, loss_fn, verbose=verbose)
-        torch.save(model.state_dict(), os.path.join(save_dir_path, f'model_weights_{epoch}.pth'))
+        torch.save(model.state_dict(), os.path.join(save_file_path))
         train_loss_hist.append(train_loss)
 
         val_loss = validation_loop(model, val_dataloader, loss_fn)
