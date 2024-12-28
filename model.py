@@ -257,21 +257,64 @@ def fit(
 
     return train_loss_hist, val_loss_hist
 
-def predict(
+def greedy_translate(
+        model: MyTransformer, dataloader: DataLoader, max_length: int = 50,
+        pad_token_id: int = 0, bos_token_id: int = 2, eos_token_id: int = 3
+):
+    """
+    Performs beam search to tranlate the sequence.
+
+    Args:
+    model (MyTransformer): The model used for translation.
+    dataloader (DataLoader): The dataloader to translate.
+    max_length (int, optional): Maximum length of tranlation sequence. Defaults to 50.
+    pad_token_id (int, optional): [PAD] token id. Defaults to 0
+    bos_token_id (int, optional): [BOS] token id. Defaults to 2
+    eos_token_id (int, optional): [EOS] token id. Defaults to 3
+    """
+
+    model.eval()
+
+    device = next(model.parameters()).device
+
+    with torch.no_grad():
+        for src in dataloader:
+            batch_size = src.size(0)
+
+            input_dst = torch.full((batch_size, 1), bos_token_id, dtype=torch.long, device=device)
+
+            for _ in range(max_length):
+                next_token_scores = model(src, input_dst)[:, -1, :]
+                next_token_scores[:, pad_token_id] = float('-inf')
+                next_token_scores = F.log_softmax(next_token_scores, dim=-1)
+                
+                next_token_id = torch.argmax(next_token_scores, dim=-1)
+
+                is_sequence_ended = \
+                    (input_dst[:, -1] == eos_token_id) | (input_dst[:, -1] == pad_token_id)
+                next_token_id[is_sequence_ended] = pad_token_id
+                if torch.all(is_sequence_ended):
+                    break
+
+                input_dst = torch.hstack((input_dst, next_token_id.view(-1, 1)))
+
+            yield input_dst
+
+def beam_translate(
         model: MyTransformer, dataloader: DataLoader, num_beams: int = 10, max_length: int = 50, 
         pad_token_id: int = 0, bos_token_id: int = 2, eos_token_id: int = 3
 ):
     """
-    Performs beam search to predict tranlated sequence.
+    Performs beam search to tranlate the sequence.
 
     Args:
-        model (MyTransformer): A model used for prediction.
+        model (MyTransformer): The model used for translation.
         dataloader (DataLoader): A dataloader to translate.
-        num_beams (int): Number of beam hypothesis to keep track on.
-        max_length (int): Maximum length of tranlation sequence.
-        pad_token_id (int): [PAD] token id.
-        bos_token_id (int): [BOS] token id.
-        eos_token_id (int): [EOS] token id.
+        num_beams (int, optional): Number of beam hypothesis to keep track on. Defaults to 10
+        max_length (int, optional): Maximum length of tranlation sequence. Defaults to 50
+        pad_token_id (int, optional): [PAD] token id. Defaults to 0
+        bos_token_id (int, optional): [BOS] token id. Defaults to 2
+        eos_token_id (int, optional): [EOS] token id. Defaults to 3
 
     Returns:
         torch.Tensor: Translated sequences.
@@ -312,7 +355,8 @@ def predict(
                 next_token_scores, next_tokens = torch.topk(
                     next_token_scores, 
                     2*num_beams, 
-                    dim=-1, sorted=False)
+                    dim=-1, sorted=False
+                )
 
                 next_indices = next_tokens // vocabulary_size
                 next_tokens = next_tokens % vocabulary_size
@@ -483,8 +527,63 @@ def check_train_loop():
                 print('model translation:', dst_tokenizer.decode(pred.tolist()))
                 print('-' * 10)
 
-def check_predict():
-    print('Check predict:')
+def check_greedy_translate():
+    print('Check greedy translate::')
+
+    VOCABULARY_SIZE = 50000
+    D_MODEL = 32
+    N_HEAD = 1
+    NUM_ENCODER_LAYERS = 1
+    NUM_DECODER_LAYERS = 1
+    DIM_FEEDFORWARD = 128
+    DROPOUT = 0
+
+    NUM_SAMPLES = 10
+
+    script_dir_path = os.path.dirname(__file__)
+
+    save_dir_path = os.path.join(script_dir_path, 'saved')
+    save_src_tokenizer_file_path = os.path.join(save_dir_path, 'src-tokenizer.json')
+    save_dst_tokenizer_file_path = os.path.join(save_dir_path, 'dst-tokenizer.json')
+    save_model_weights_file_path = os.path.join(save_dir_path, 'simple_model_weights.pth')
+
+    dataset_dir_path = os.path.join(script_dir_path, 'dataset')
+
+    src_tokenizer = Tokenizer.from_file(save_src_tokenizer_file_path)
+    dst_tokenizer = Tokenizer.from_file(save_dst_tokenizer_file_path)
+
+    src_transform = Lambda(lambda src : torch.tensor(src_tokenizer.encode(src).ids, dtype=torch.long))
+    dst_transform = Lambda(lambda dst : torch.tensor(dst_tokenizer.encode(dst).ids, dtype=torch.long))
+
+    dataset = AlienDataset(dataset_dir_path, subset='train',
+                           src_transform=src_transform, dst_transform=dst_transform)
+    dataset = Subset(dataset, range(NUM_SAMPLES))
+
+    collate_fn = (lambda sequences : bucket_collate_fn(sequences, is_test=False))
+    dataloader = DataLoader(dataset, batch_size=NUM_SAMPLES, shuffle=True, collate_fn=collate_fn)
+
+    model = MyTransformer(
+        VOCABULARY_SIZE, VOCABULARY_SIZE,
+        d_model=D_MODEL, nhead=N_HEAD,
+        num_encoder_layers=NUM_ENCODER_LAYERS, num_decoder_layers=NUM_DECODER_LAYERS,
+        dim_feedforward=DIM_FEEDFORWARD, dropout=DROPOUT
+    )
+    
+    model.load_state_dict(torch.load(save_model_weights_file_path, weights_only=True))
+
+    with torch.no_grad():
+        collate_fn = (lambda sequences : bucket_collate_fn(sequences, is_test=False)[0])
+        dataloader = DataLoader(dataset, batch_size=NUM_SAMPLES, shuffle=False, collate_fn=collate_fn)
+
+        preds = next(greedy_translate(model, dataloader))
+        for (dst, pred) in zip(dataset, preds):
+            dst = dst[1]
+            print('actural translation:', dst_tokenizer.decode(dst.tolist()))
+            print('model translation:', dst_tokenizer.decode(pred.tolist()))
+            print('-' * 10)
+
+def check_beam_translate():
+    print('Check beam predict:')
 
     VOCABULARY_SIZE = 50000
     D_MODEL = 32
@@ -533,7 +632,7 @@ def check_predict():
         collate_fn = (lambda sequences : bucket_collate_fn(sequences, is_test=False)[0])
         dataloader = DataLoader(dataset, batch_size=NUM_SAMPLES, shuffle=False, collate_fn=collate_fn)
 
-        preds = next(predict(model, dataloader, num_beams=NUM_BEAMS))
+        preds = next(beam_translate(model, dataloader, num_beams=NUM_BEAMS))
         for (dst, pred) in zip(dataset, preds):
             dst = dst[1]
             print('actural translation:', dst_tokenizer.decode(dst.tolist()))
@@ -544,4 +643,5 @@ if __name__ == '__main__':
     check_positional_encoder()
     check_my_transformer()
     check_train_loop()
-    check_predict()
+    check_greedy_translate()
+    # check_beam_translate()
