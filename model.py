@@ -1,4 +1,5 @@
 import math
+from typing import Iterable
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -258,7 +259,7 @@ def fit(
     return train_loss_hist, val_loss_hist
 
 def greedy_translate(
-        model: MyTransformer, dataloader: DataLoader, max_length: int = 50,
+        model: MyTransformer, srcs: Iterable[torch.Tensor], max_length: int = 50,
         pad_token_id: int = 0, bos_token_id: int = 2, eos_token_id: int = 3
 ):
     """
@@ -266,7 +267,7 @@ def greedy_translate(
 
     Args:
     model (MyTransformer): The model used for translation.
-    dataloader (DataLoader): The dataloader to translate.
+    srcs (Iterable[torch.Tensor]): The batches to translate.
     max_length (int, optional): Maximum length of tranlation sequence. Defaults to 50.
     pad_token_id (int, optional): [PAD] token id. Defaults to 0
     bos_token_id (int, optional): [BOS] token id. Defaults to 2
@@ -278,7 +279,7 @@ def greedy_translate(
     device = next(model.parameters()).device
 
     with torch.no_grad():
-        for src in dataloader:
+        for src in srcs:
             batch_size = src.size(0)
 
             input_dst = torch.full((batch_size, 1), bos_token_id, dtype=torch.long, device=device)
@@ -301,7 +302,7 @@ def greedy_translate(
             yield input_dst
 
 def beam_translate(
-        model: MyTransformer, dataloader: DataLoader, num_beams: int = 10, max_length: int = 50, 
+        model: MyTransformer, srcs: Iterable[torch.Tensor], num_beams: int = 10, max_length: int = 20, 
         pad_token_id: int = 0, bos_token_id: int = 2, eos_token_id: int = 3
 ):
     """
@@ -309,9 +310,9 @@ def beam_translate(
 
     Args:
         model (MyTransformer): The model used for translation.
-        dataloader (DataLoader): A dataloader to translate.
+        srcs (Iterable[torch.Tensor]): The batches to translate.
         num_beams (int, optional): Number of beam hypothesis to keep track on. Defaults to 10
-        max_length (int, optional): Maximum length of tranlation sequence. Defaults to 50
+        max_length (int, optional): Maximum length of tranlation sequence. Defaults to 20
         pad_token_id (int, optional): [PAD] token id. Defaults to 0
         bos_token_id (int, optional): [BOS] token id. Defaults to 2
         eos_token_id (int, optional): [EOS] token id. Defaults to 3
@@ -325,7 +326,7 @@ def beam_translate(
     device = next(model.parameters()).device
 
     with torch.no_grad():
-        for src in dataloader:
+        for src in srcs:
             batch_size = src.size(0)
 
             beam_scorer = BeamSearchScorer(
@@ -339,48 +340,52 @@ def beam_translate(
 
             beam_scores = torch.zeros((batch_size), dtype=torch.float, device=device)
 
-            next_beam_tokens = None
-            next_beam_indices = None
+            next_token_ids = None
+            next_beam_ids = None
 
-            for step in range(1, max_length + 1):
+            for step in range(1, max_length + 1):  
                 next_token_scores = model(src, input_dst)[:, -1, :]
-                next_token_scores[:, pad_token_id] = float('-inf')
-
+                next_token_scores[:, pad_token_id] = float('-inf') 
+                next_token_scores = F.log_softmax(next_token_scores, dim=-1)
+                
                 vocabulary_size = next_token_scores.size(-1)
 
-                next_token_scores = F.log_softmax(next_token_scores, dim=-1)
-                next_token_scores = beam_scores.view(-1, 1) + next_token_scores
-                next_token_scores = next_token_scores.view(batch_size, -1)
+                next_seq_scores = beam_scores.view(-1, 1) + next_token_scores
+                next_seq_scores = next_seq_scores.view(batch_size, -1)
 
-                next_token_scores, next_tokens = torch.topk(
-                    next_token_scores, 
+                next_seq_scores, next_token_ids = torch.topk(
+                    next_seq_scores, 
                     2*num_beams, 
                     dim=-1, sorted=False
                 )
 
-                next_indices = next_tokens // vocabulary_size
-                next_tokens = next_tokens % vocabulary_size
+                next_token_beams = (next_token_ids // vocabulary_size)
+                next_token_ids = next_token_ids % vocabulary_size
 
                 if step == 1:
                     src = src.unsqueeze(1).repeat(1, num_beams, 1)
-                    src = src.view(batch_size * num_beams, -1)
+                    src = src.view((batch_size * num_beams, -1))
 
-                    input_dst = input_dst.unsqueeze(1).repeat(1, num_beams, 1)
-                    input_dst = input_dst.view(batch_size * num_beams, -1)
-    
+                    input_dst = torch.full((batch_size * num_beams, 1), bos_token_id, dtype=torch.long, device=device)
+
+                    beam_scores = torch.zeros((batch_size * num_beams), dtype=torch.float, device=device)
+
                 nexts = beam_scorer.process(
-                    input_dst, next_token_scores, next_tokens, next_indices, 
+                    input_dst, next_seq_scores, next_token_ids, next_token_beams, 
                     pad_token_id=pad_token_id, eos_token_id=eos_token_id
                 )
                 beam_scores = nexts['next_beam_scores']
-                next_beam_tokens = nexts['next_beam_tokens']
-                next_beam_indices = nexts['next_beam_indices']
-            
+                next_token_ids = nexts['next_beam_tokens']
+                next_beam_ids = nexts['next_beam_indices']
+
+                if beam_scorer.is_done:
+                    break
+
                 if step != max_length:
-                    input_dst = torch.hstack((input_dst, next_beam_tokens.view(-1, 1)))
+                    input_dst = torch.hstack((input_dst[next_beam_ids], next_token_ids.view(-1, 1)))
 
             yield beam_scorer.finalize(
-                input_dst, beam_scores, next_beam_tokens, next_beam_indices, max_length,
+                input_dst, beam_scores, next_token_ids, next_beam_ids, max_length,
                 pad_token_id=pad_token_id, eos_token_id=eos_token_id
             )['sequences']
 
@@ -528,7 +533,7 @@ def check_train_loop():
                 print('-' * 10)
 
 def check_greedy_translate():
-    print('Check greedy translate::')
+    print('Check greedy translate:')
 
     VOCABULARY_SIZE = 50000
     D_MODEL = 32
@@ -583,7 +588,7 @@ def check_greedy_translate():
             print('-' * 10)
 
 def check_beam_translate():
-    print('Check beam predict:')
+    print('Check beam translate:')
 
     VOCABULARY_SIZE = 50000
     D_MODEL = 32
@@ -595,7 +600,9 @@ def check_beam_translate():
 
     NUM_SAMPLES = 10
 
-    NUM_BEAMS = 10
+    NUM_BEAMS = 30
+
+    MAX_LENGTH = 50
 
     script_dir_path = os.path.dirname(__file__)
 
@@ -632,7 +639,7 @@ def check_beam_translate():
         collate_fn = (lambda sequences : bucket_collate_fn(sequences, is_test=False)[0])
         dataloader = DataLoader(dataset, batch_size=NUM_SAMPLES, shuffle=False, collate_fn=collate_fn)
 
-        preds = next(beam_translate(model, dataloader, num_beams=NUM_BEAMS))
+        preds = next(beam_translate(model, dataloader, num_beams=NUM_BEAMS, max_length=MAX_LENGTH))
         for (dst, pred) in zip(dataset, preds):
             dst = dst[1]
             print('actural translation:', dst_tokenizer.decode(dst.tolist()))
@@ -640,8 +647,8 @@ def check_beam_translate():
             print('-' * 10)
 
 if __name__ == '__main__':
-    check_positional_encoder()
-    check_my_transformer()
-    check_train_loop()
-    check_greedy_translate()
-    # check_beam_translate()
+    # check_positional_encoder()
+    # check_my_transformer()
+    # check_train_loop()
+    # check_greedy_translate()
+    check_beam_translate()
