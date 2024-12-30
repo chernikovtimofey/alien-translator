@@ -283,23 +283,29 @@ def greedy_translate(
             batch_size = src.size(0)
 
             input_dst = torch.full((batch_size, 1), bos_token_id, dtype=torch.long, device=device)
+            seq_scores = torch.zeros((batch_size), dtype=torch.float, device=device)
 
             for _ in range(max_length):
                 next_token_scores = model(src, input_dst)[:, -1, :]
                 next_token_scores[:, pad_token_id] = float('-inf')
                 next_token_scores = F.log_softmax(next_token_scores, dim=-1)
                 
-                next_token_id = torch.argmax(next_token_scores, dim=-1)
+                next_token_score, next_token_id = torch.max(next_token_scores, dim=-1)
 
                 is_sequence_ended = \
                     (input_dst[:, -1] == eos_token_id) | (input_dst[:, -1] == pad_token_id)
                 next_token_id[is_sequence_ended] = pad_token_id
+                next_token_score[is_sequence_ended] = 0
                 if torch.all(is_sequence_ended):
                     break
 
                 input_dst = torch.hstack((input_dst, next_token_id.view(-1, 1)))
+                seq_scores += next_token_score
 
-            yield input_dst
+            result = dict()
+            result['sequences'] = input_dst
+            result['sequence_scores'] = seq_scores / (torch.count_nonzero(input_dst != pad_token_id, dim=-1))
+            yield result
 
 def beam_translate(
         model: MyTransformer, srcs: Iterable[torch.Tensor], num_beams: int = 10, max_length: int = 20, 
@@ -376,18 +382,22 @@ def beam_translate(
                 )
                 beam_scores = nexts['next_beam_scores']
                 next_token_ids = nexts['next_beam_tokens']
-                next_beam_ids = nexts['next_beam_indices']
+                next_token_beams = nexts['next_beam_indices']
 
                 if beam_scorer.is_done:
                     break
 
                 if step != max_length:
-                    input_dst = torch.hstack((input_dst[next_beam_ids], next_token_ids.view(-1, 1)))
+                    input_dst = torch.hstack((input_dst[next_token_beams], next_token_ids.view(-1, 1)))
 
-            yield beam_scorer.finalize(
+            final_seqs = beam_scorer.finalize(
                 input_dst, beam_scores, next_token_ids, next_beam_ids, max_length,
                 pad_token_id=pad_token_id, eos_token_id=eos_token_id
-            )['sequences']
+            )
+            result = dict()
+            result['sequences'] = final_seqs['sequences']
+            result['sequence_scores'] = final_seqs['sequence_scores']
+            yield result
 
 def check_positional_encoder():
     print('Check PositionalEcoder:')
@@ -581,10 +591,13 @@ def check_greedy_translate():
         dataloader = DataLoader(dataset, batch_size=NUM_SAMPLES, shuffle=False, collate_fn=collate_fn)
 
         preds = next(greedy_translate(model, dataloader))
-        for (dst, pred) in zip(dataset, preds):
+        seqs = preds['sequences']
+        scores = preds['sequence_scores']
+        for (dst, seq, score) in zip(dataset, seqs, scores):
             dst = dst[1]
             print('actural translation:', dst_tokenizer.decode(dst.tolist()))
-            print('model translation:', dst_tokenizer.decode(pred.tolist()))
+            print('model translation:', dst_tokenizer.decode(seq.tolist()))
+            print('score:', score.item())
             print('-' * 10)
 
 def check_beam_translate():
@@ -600,7 +613,7 @@ def check_beam_translate():
 
     NUM_SAMPLES = 10
 
-    NUM_BEAMS = 30
+    NUM_BEAMS = 2
 
     MAX_LENGTH = 50
 
@@ -640,15 +653,18 @@ def check_beam_translate():
         dataloader = DataLoader(dataset, batch_size=NUM_SAMPLES, shuffle=False, collate_fn=collate_fn)
 
         preds = next(beam_translate(model, dataloader, num_beams=NUM_BEAMS, max_length=MAX_LENGTH))
-        for (dst, pred) in zip(dataset, preds):
+        sequences = preds['sequences']
+        scores = preds['sequence_scores']
+        for (dst, seq, score) in zip(dataset, sequences, scores):
             dst = dst[1]
             print('actural translation:', dst_tokenizer.decode(dst.tolist()))
-            print('model translation:', dst_tokenizer.decode(pred.tolist()))
+            print('model translation:', dst_tokenizer.decode(seq.tolist()))
+            print('score:', score.item())
             print('-' * 10)
 
 if __name__ == '__main__':
     # check_positional_encoder()
     # check_my_transformer()
     # check_train_loop()
-    # check_greedy_translate()
+    check_greedy_translate()
     check_beam_translate()
