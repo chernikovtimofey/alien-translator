@@ -480,10 +480,10 @@ def check_train_loop():
     DIM_FEEDFORWARD = 128
     DROPOUT = 0
 
-    NUM_SAMPLES = 30
+    NUM_SAMPLES = 10
 
     LEARNING_RATE = 0.01
-    NUM_EPOCHS = 100
+    NUM_EPOCHS = 50
 
     script_dir_path = os.path.dirname(__file__)
 
@@ -553,7 +553,7 @@ def check_greedy_translate():
     DIM_FEEDFORWARD = 128
     DROPOUT = 0
 
-    NUM_SAMPLES = 10
+    NUM_SAMPLES = 5
 
     script_dir_path = os.path.dirname(__file__)
 
@@ -613,7 +613,7 @@ def check_beam_translate():
 
     NUM_SAMPLES = 10
 
-    NUM_BEAMS = 2
+    NUM_BEAMS = 5
 
     MAX_LENGTH = 50
 
@@ -665,6 +665,6 @@ def check_beam_translate():
 if __name__ == '__main__':
     # check_positional_encoder()
     # check_my_transformer()
-    # check_train_loop()
+    check_train_loop()
     check_greedy_translate()
     check_beam_translate()

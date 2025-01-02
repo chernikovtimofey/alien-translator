@@ -6,8 +6,8 @@ from typing import Union
 from tokenizers import Tokenizer
 from tokenizers import normalizers
 from tokenizers import pre_tokenizers
-from tokenizers.models import BPE
-from tokenizers.trainers import BpeTrainer
+from tokenizers.models import WordPiece
+from tokenizers.trainers import WordPieceTrainer
 from tokenizers.processors import TemplateProcessing
 import torch
 from torch.utils.data import Sampler
@@ -29,11 +29,11 @@ def make_src_tokenizer(srcs: list[str], vocab_size: int, show_progress: bool = F
         tokenizers.Tokenizer
     """
 
-    tokenizer = Tokenizer(BPE(unk_token='[UNK]'))
-    trainer = BpeTrainer(
+    tokenizer = Tokenizer(WordPiece(unk_token='[UNK]'))
+    trainer = WordPieceTrainer(
         vocab_size=vocab_size, show_progress=show_progress, special_tokens=['[PAD]', '[UNK]', '[BOS]', '[EOS]']
     )
-    tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
+    tokenizer.pre_tokenizer = pre_tokenizers.WhitespaceSplit()
     tokenizer.post_processor = TemplateProcessing(
         single='[BOS] $A [EOS]',
         special_tokens=[('[BOS]', 2), ('[EOS]', 3)]
@@ -56,8 +56,8 @@ def make_dst_tokenizer(dsts: list[str], vocab_size: int, show_progress: bool = F
         tokenizers.Tokenizer
     """
 
-    tokenizer = Tokenizer(BPE(unk_token='[UNK]'))
-    trainer = BpeTrainer(
+    tokenizer = Tokenizer(WordPiece(unk_token='[UNK]'))
+    trainer = WordPieceTrainer(
         vocab_size=vocab_size, show_progress=show_progress, special_tokens=['[PAD]', '[UNK]', '[BOS]', '[EOS]']
     )
     tokenizer.normalizer = normalizers.Lowercase()
@@ -225,7 +225,7 @@ def bucket_collate_fn(
 def check_make_srcs_tokenizer():
     print('Check make srcs_tokenizer:')
 
-    VOCABULARY_SIZE = 50000
+    VOCABULARY_SIZE = 30000
 
     script_dir_path = os.path.dirname(__file__)
     dataset_file_path = os.path.join(script_dir_path, 'dataset/train')
@@ -257,7 +257,7 @@ def check_make_srcs_tokenizer():
 def check_make_dists_tokenizer():
     print('Check make_dists_tokenizer:')
 
-    VOCABULARY_SIZE = 50000
+    VOCABULARY_SIZE = 30000
 
     script_dir_path = os.path.dirname(__file__)
     dataset_file_path = os.path.join(script_dir_path, 'dataset/train')
