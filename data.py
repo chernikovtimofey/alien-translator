@@ -9,6 +9,7 @@ from tokenizers import pre_tokenizers
 from tokenizers.models import WordPiece
 from tokenizers.trainers import WordPieceTrainer
 from tokenizers.processors import TemplateProcessing
+from tokenizers import decoders
 import torch
 from torch.utils.data import Sampler
 from torch.utils.data import Dataset
@@ -18,10 +19,10 @@ from torchvision.transforms import Lambda
 
 def make_src_tokenizer(srcs: list[str], vocab_size: int, show_progress: bool = False):
     """
-    Makes BPE tokenizer for strings to be translated.
+    Makes WordPiece tokenizer for src strings.
 
     Args:
-        srcs (list[str]): A list of strings to be translated.
+        srcs (list[str]): A list of src strings.
         vocab_size (int): The size of the final vocabulary, including all tokens and alphabet.
         show_progress (bool, optional): Whether to show progress bars while training.
 
@@ -38,6 +39,7 @@ def make_src_tokenizer(srcs: list[str], vocab_size: int, show_progress: bool = F
         single='[BOS] $A [EOS]',
         special_tokens=[('[BOS]', 2), ('[EOS]', 3)]
     )
+    tokenizer.decoder = decoders.WordPiece()
 
     tokenizer.train_from_iterator(srcs, trainer)
 
@@ -45,10 +47,10 @@ def make_src_tokenizer(srcs: list[str], vocab_size: int, show_progress: bool = F
 
 def make_dst_tokenizer(dsts: list[str], vocab_size: int, show_progress: bool = False):
     """
-    Makes BPE tokenizer for translation strings.
+    Makes WordPiece tokenizer for dst strings.
 
     Args:
-        dsts (list[str]): A list of translation strings.
+        dsts (list[str]): A list of dst strings.
         vocab_size (int): The size of the final vocabulary, including all tokens and alphabet.
         show_progress (bool, optional): Whether to show progress bars while training.
 
@@ -68,26 +70,27 @@ def make_dst_tokenizer(dsts: list[str], vocab_size: int, show_progress: bool = F
         single='[BOS] $A [EOS]', 
         special_tokens=[('[BOS]', 2), ('[EOS]', 3)]
     )   
+    tokenizer.decoder = decoders.WordPiece()
 
     tokenizer.train_from_iterator(dsts, trainer)
 
     return tokenizer
 
 class AlienDataset(Dataset):
-    """Dataset class that loads Alien dataset."""
+    """Dataset class to load Alien dataset."""
 
     def __init__(
             self, dataset_dir_path: str, subset: str = 'test', 
             src_transform: Callable[[str], any] = None, dst_transform: Callable[[str], any] = None
     ):
         """
-        Loads the dataset.
+        Loads the Alien dataset.
 
         Args:
             dataset_dir_path (str): Path to Alien dataset directory.
             subset (str, optional): Can take values "train", "val" and "test" depending on the subset you want to load. Defaults to "test". 
-            src_transform (Callable[[str], any], optional): Transformation of string to be translated. Defaults to None. 
-            dst_transform (Callable[[str], any], optional): Transformation of translation string. Defaults to None.
+            src_transform (Callable[[str], any], optional): Transformation of src string. Defaults to None. 
+            dst_transform (Callable[[str], any], optional): Transformation of dst string. Defaults to None.
 
         Raises:
             ValueError: Raised if subset value is not valid.
@@ -139,7 +142,7 @@ class BucketSampler(Sampler):
     
     All the sequences are divided into buckets. Two sequences are in the same bucket 
     if their lengths are within the range of the bucket. Two sequences from different buckets 
-    can't be in the same batch though if two sequences are in the same bucket doesn't necessary mean 
+    can't be in the same batch though if two sequences are in the same bucket doesn't necessary means 
     they end up in the same batch.
     """
 
@@ -154,7 +157,7 @@ class BucketSampler(Sampler):
             dataset (Dataset): Dataset from which we want to sample.
             is_test (bool): Whether the dataset subset is test or not.
             batch_size (int, optional): Batch size. Defaults to 64.
-            bucket_size (int, optional): Size of range of a single bucket.
+            bucket_size (int, optional): Size of range of a single bucket. Defaults to 5.
             shuffle (bool, optional): Whether to shuffle the dataset. Defaults to False.
         """
 
@@ -209,7 +212,6 @@ def bucket_collate_fn(
         sequences (list[Union[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]]): List of variable length sequences or a list of tuples of two variable length sequences.
         is_test (bool): Whether "sequences" is a list of sequences or a list of tuples. 
         padding_value (int, optional): Value for padded elements. Defaults to 0.
-        padding_side (str, optional): The side to pad the sequences on. Defaults to "right".
 
     Returns:
         torch.Tensor: Batch of sequences.
@@ -222,8 +224,8 @@ def bucket_collate_fn(
             (lambda sequences : pad_sequence(sequences, batch_first=True, padding_value=padding_value))
         return tuple(map(pad_sequence_, zip(*sequences)))
     
-def check_make_srcs_tokenizer():
-    print('Check make srcs_tokenizer:')
+def check_make_src_tokenizer():
+    print('Check make_src_tokenizer:')
 
     VOCABULARY_SIZE = 30000
 
@@ -234,10 +236,10 @@ def check_make_srcs_tokenizer():
     save_tokenizer_file_path = os.path.join(save_dir_path, 'src-tokenizer.json')
 
     srcs = []
-    with open(dataset_file_path, 'r') as data_file:
-        for line in data_file:
-            line_data = json.loads(line)
-            srcs.append(line_data['src'])   
+    with open(dataset_file_path, 'r') as dataset_file:
+        for line in dataset_file:
+            sample = json.loads(line)
+            srcs.append(sample['src'])   
 
     tokenizer = None
     if os.path.isfile(save_tokenizer_file_path):
@@ -254,8 +256,8 @@ def check_make_srcs_tokenizer():
         print(encoded.ids)
         print('-' * 10)
         
-def check_make_dists_tokenizer():
-    print('Check make_dists_tokenizer:')
+def check_make_dst_tokenizer():
+    print('Check make_dst_tokenizer:')
 
     VOCABULARY_SIZE = 30000
 
@@ -266,10 +268,10 @@ def check_make_dists_tokenizer():
     save_tokenizer_file_path = os.path.join(save_dir_path, 'dst-tokenizer.json')
 
     dsts = []
-    with open(dataset_file_path, 'r') as data_file:
-        for line in data_file:
-            line_data = json.loads(line)
-            dsts.append(line_data['dst'])   
+    with open(dataset_file_path, 'r') as dataset_file:
+        for line in dataset_file:
+            sample = json.loads(line)
+            dsts.append(sample['dst'])   
 
     if os.path.isfile(save_tokenizer_file_path):
         tokenizer = Tokenizer.from_file(save_tokenizer_file_path)
@@ -288,7 +290,6 @@ def check_make_dists_tokenizer():
 def check_alien_dataset():
     print('Check AlienDataset:')
 
-    NUM_TEXTS = 10
     SUBSET = 'train'
 
     script_dir_path = os.path.dirname(__file__)
@@ -306,7 +307,7 @@ def check_alien_dataset():
 
     dataset = AlienDataset(dataset_dir_path, subset=SUBSET, 
                            src_transform=src_transform, dst_transform=dst_transform)
-    for idx in range(NUM_TEXTS):
+    for idx in range(10):
         if SUBSET == 'test':
             src = dataset[idx]
             print(src)
@@ -362,7 +363,7 @@ def check_bucket_sampler():
             print('-' * 10)
 
 if __name__ == '__main__':
-    check_make_dists_tokenizer()
-    check_make_srcs_tokenizer()
+    check_make_src_tokenizer()
+    check_make_dst_tokenizer()
     check_alien_dataset()
     check_bucket_sampler()

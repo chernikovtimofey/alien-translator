@@ -11,7 +11,7 @@ from transformers import BeamSearchScorer
 from data import *
 
 class PositionalEncoder(nn.Module):
-    """Mudule that encodes information about position into embedding."""
+    """Module that encodes information about position into embedding."""
 
     def __init__(self, d_model: int, dropout_p: int, max_len: int):
         """
@@ -43,7 +43,7 @@ class PositionalEncoder(nn.Module):
 class MyTransformer(nn.Module):
     """Wrapper of PyTorch's Transformer model for translation."""
 
-    def __init__(self, num_src_tokens: int, num_dst_tokens: int, 
+    def __init__(self, num_src_tokens: int, num_tgt_tokens: int, 
                  d_model: int = 512, nhead: int = 8, 
                  num_encoder_layers: int = 6, num_decoder_layers: int = 6, 
                  dim_feedforward: int = 2048, dropout: float = 0.1):
@@ -51,8 +51,8 @@ class MyTransformer(nn.Module):
         Initializes all necessary modules.
 
         Args:
-            num_src_tokens (int): Number of tokens of sequence to be translated.
-            num_dst_tokens (int): Number of tokens of translated sequence.
+            num_src_tokens (int): Number of tokens of src sequence.
+            num_tgt_tokens (int): Number of tokens of tgt sequence.
             d_model (int, optional): The number of expected features in the encoder/decoder inputs. Defaults to 512.
             nhead (int, optional): The number of heads in the multiheadattention models. Defaults to 8.
             num_encoder_layers (int, optional): The number of sub-encoder-layers in the encoder. Defaults to 6.
@@ -61,14 +61,14 @@ class MyTransformer(nn.Module):
             dropout (int, optional): The dropout value. Defaults to 0.1.
         """
 
-        super().__init__()
-
         MAX_LEN = 500
+
+        super().__init__()
 
         self.d_model = d_model
 
         self.src_embedding = nn.Embedding(num_src_tokens, d_model)
-        self.dst_embedding = nn.Embedding(num_dst_tokens, d_model)
+        self.tgt_embedding = nn.Embedding(num_tgt_tokens, d_model)
 
         self.positional_encoder = PositionalEncoder(d_model, dropout, MAX_LEN)
 
@@ -79,40 +79,40 @@ class MyTransformer(nn.Module):
             batch_first=True
         )
 
-        self.out_layer = nn.Linear(d_model, num_dst_tokens)
+        self.out_layer = nn.Linear(d_model, num_tgt_tokens)
 
     def forward(
-            self, src: torch.Tensor, dst: torch.Tensor, dst_mask: torch.Tensor = None, pad_token_id: int = 0
+            self, src: torch.Tensor, tgt: torch.Tensor, tgt_mask: torch.Tensor = None, pad_token_id: int = 0
     ):
         """
         Args:
-            src (torch.Tensor): The sequence to be translated.
-            dst (torch.Tensor): The translated sequence.
-            dst_mask (torch.Tensor, optional): The additive mask for the translated sequence. Defaults to a square causal mask for the sequence.
+            src (torch.Tensor): The src sequence.
+            tgt (torch.Tensor): The tgt sequence.
+            tgt_mask (torch.Tensor, optional): The additive mask for the tgt. Defaults to a square causal mask for the sequence.
             pad_token_id (int): [PAD] token id.
 
         Returns:
-            torch.Tensor: Prediction scores for each translated sequence element.
+            torch.Tensor: Prediction scores for each tgt sequence element.
         """
 
         device = next(self.parameters()).device
 
-        if not dst_mask:
-            dst_mask = Transformer.generate_square_subsequent_mask(dst.size(1), device=device)
+        if not tgt_mask:
+            tgt_mask = Transformer.generate_square_subsequent_mask(tgt.size(1), device=device)
         src_padding_mask = MyTransformer.generate_padding_mask(src, pad_token_id=pad_token_id, device=device)
-        dst_padding_mask = MyTransformer.generate_padding_mask(dst, pad_token_id=pad_token_id, device=device)
+        tgt_padding_mask = MyTransformer.generate_padding_mask(tgt, pad_token_id=pad_token_id, device=device)
 
         src = self.src_embedding(src) * math.sqrt(self.d_model)
-        dst = self.dst_embedding(dst) * math.sqrt(self.d_model)
+        tgt = self.tgt_embedding(tgt) * math.sqrt(self.d_model)
 
         src = self.positional_encoder(src)
-        dst = self.positional_encoder(dst)
+        tgt = self.positional_encoder(tgt)
 
         out = self.transformer(
-            src, dst, 
-            tgt_mask=dst_mask, 
+            src, tgt, 
+            tgt_mask=tgt_mask, 
             src_key_padding_mask=src_padding_mask,
-            tgt_key_padding_mask=dst_padding_mask
+            tgt_key_padding_mask=tgt_padding_mask
         )
         out = self.out_layer(out)
         return out
@@ -124,7 +124,7 @@ class MyTransformer(nn.Module):
         Args:
             sequences (torch.Tensor): Sequences to generate padding mask on.
             pad_token_id (int, optional): [PAD] token id. Defaults to 0.
-            device (Union[torch.device, str]): Device to put the returned mask on. Defaults to cpu.
+            device (Union[torch.device, str]): Device to put the returned mask on. Defaults to CPU.
 
         Returns:
             torch.Tensor
@@ -157,16 +157,16 @@ def train_loop(
 
     total_loss = 0
     dataset_processed_size = 0
-    for batch_num, (src, dst) in enumerate(dataloader, start=1):
+    for batch_num, (src, tgt) in enumerate(dataloader, start=1):
         src = src.to(device)
-        dst = dst.to(device)
+        tgt = tgt.to(device)
 
-        input_dst = dst[:, :-1]
-        target_dst = dst[:, 1:]
+        input_tgt = tgt[:, :-1]
+        target_tgt = tgt[:, 1:]
 
-        scores = model(src, input_dst)
+        scores = model(src, input_tgt)
 
-        loss = loss_fn(scores.transpose(1, 2), target_dst)
+        loss = loss_fn(scores.transpose(1, 2), target_tgt)
 
         loss.backward()
         optimizer.step()
@@ -200,16 +200,16 @@ def validation_loop(model: MyTransformer, dataloader: DataLoader, loss_fn: torch
 
     total_loss = 0
     with torch.no_grad():
-        for (src, dst) in dataloader:
+        for (src, tgt) in dataloader:
             src = src.to(device)
-            dst = dst.to(device)
+            tgt = tgt.to(device)
 
-            input_dst = dst[:, :-1]
-            target_dst = dst[:, 1:]
+            input_tgt = tgt[:, :-1]
+            target_tgt = tgt[:, 1:]
 
-            scores = model(src, input_dst)
+            scores = model(src, input_tgt)
 
-            loss = loss_fn(scores.transpose(1, 2), target_dst)
+            loss = loss_fn(scores.transpose(1, 2), target_tgt)
             total_loss += loss.detach().item()
 
     return total_loss / len(dataloader)
@@ -236,8 +236,6 @@ def fit(
         Tuple[List[float], List[float]]: Training loss history and validation loss history.
     """
 
-    device = next(model.parameters()).device
-
     train_loss_hist = []
     val_loss_hist = []
 
@@ -263,7 +261,7 @@ def greedy_translate(
         pad_token_id: int = 0, bos_token_id: int = 2, eos_token_id: int = 3
 ):
     """
-    Performs beam search to tranlate the sequence.
+    Performs greedy search to tranlate the sequence.
 
     Args:
     model (MyTransformer): The model used for translation.
@@ -282,31 +280,34 @@ def greedy_translate(
         for src in srcs:
             batch_size = src.size(0)
 
-            input_dst = torch.full((batch_size, 1), bos_token_id, dtype=torch.long, device=device)
-            seq_scores = torch.zeros((batch_size), dtype=torch.float, device=device)
+            tgt = torch.full((batch_size, 1), bos_token_id, dtype=torch.long, device=device)
+            seq_score = torch.zeros((batch_size), dtype=torch.float, device=device)
 
             for _ in range(max_length):
-                next_token_scores = model(src, input_dst)[:, -1, :]
+                next_token_scores = model(src, tgt)[:, -1, :]
                 next_token_scores[:, pad_token_id] = float('-inf')
                 next_token_scores = F.log_softmax(next_token_scores, dim=-1)
                 
                 next_token_score, next_token_id = torch.max(next_token_scores, dim=-1)
 
                 is_sequence_ended = \
-                    (input_dst[:, -1] == eos_token_id) | (input_dst[:, -1] == pad_token_id)
+                    (tgt[:, -1] == eos_token_id) | (tgt[:, -1] == pad_token_id)
                 next_token_id[is_sequence_ended] = pad_token_id
                 next_token_score[is_sequence_ended] = 0
                 if torch.all(is_sequence_ended):
                     break
 
-                input_dst = torch.hstack((input_dst, next_token_id.view(-1, 1)))
-                seq_scores += next_token_score
+                tgt = torch.hstack((tgt, next_token_id.view(-1, 1)))
+                seq_score += next_token_score
+
+            seq_score /= (torch.count_nonzero(tgt != pad_token_id, dim=-1))
 
             result = dict()
-            result['sequences'] = input_dst
-            result['sequence_scores'] = seq_scores / (torch.count_nonzero(input_dst != pad_token_id, dim=-1))
+            result['sequences'] = tgt
+            result['sequence_scores'] = seq_score 
             yield result
 
+# Has a major bug
 def beam_translate(
         model: MyTransformer, srcs: Iterable[torch.Tensor], num_beams: int = 10, max_length: int = 20, 
         pad_token_id: int = 0, bos_token_id: int = 2, eos_token_id: int = 3
@@ -459,20 +460,21 @@ def check_my_transformer():
         d_model=16, nhead=2, num_encoder_layers=2, num_decoder_layers=2, dim_feedforward=64
     )
     
-    srcs, dsts = batch
+    src, dst = batch
+
     print('input:')
-    print(srcs)
-    print(dsts)
+    print(src)
+    print(dst)
+
     print('output:')
-   
-    out = transformer(srcs, dsts)
+    out = transformer(src, dst)
     print(out)
     print(out.shape)
 
 def check_train_loop():
     print('Check train_loop:')
 
-    VOCABULARY_SIZE = 50000
+    VOCABULARY_SIZE = 30000
     D_MODEL = 32
     N_HEAD = 1
     NUM_ENCODER_LAYERS = 1
@@ -483,7 +485,7 @@ def check_train_loop():
     NUM_SAMPLES = 10
 
     LEARNING_RATE = 0.01
-    NUM_EPOCHS = 50
+    NUM_EPOCHS = 150
 
     script_dir_path = os.path.dirname(__file__)
 
@@ -532,9 +534,9 @@ def check_train_loop():
         model.eval()
 
         for (srcs, dsts) in dataloader:
-            dsts_input = dsts[:, :-1]
+            input_dsts = dsts[:, :-1]
 
-            scores = model(srcs, dsts_input)
+            scores = model(srcs, input_dsts)
             preds = torch.argmax(scores, dim=-1)
 
             for (dst, pred) in zip(dsts, preds):
@@ -545,7 +547,7 @@ def check_train_loop():
 def check_greedy_translate():
     print('Check greedy translate:')
 
-    VOCABULARY_SIZE = 50000
+    VOCABULARY_SIZE = 30000
     D_MODEL = 32
     N_HEAD = 1
     NUM_ENCODER_LAYERS = 1
@@ -663,8 +665,8 @@ def check_beam_translate():
             print('-' * 10)
 
 if __name__ == '__main__':
-    # check_positional_encoder()
-    # check_my_transformer()
+    check_positional_encoder()
+    check_my_transformer()
     check_train_loop()
     check_greedy_translate()
-    check_beam_translate()
+    # check_beam_translate()
