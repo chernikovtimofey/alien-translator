@@ -3,7 +3,6 @@ from typing import Iterable
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.nn import Transformer
 from torch.utils.data import DataLoader
 from torch.utils.data import Subset
 from tokenizers import Tokenizer
@@ -15,10 +14,10 @@ class PositionalEncoder(nn.Module):
 
     def __init__(self, d_model: int, dropout_p: int, max_len: int):
         """
-        Makes positional encoding vector.
+        Makes positional encoding vectors.
 
         Args:
-            d_model (int): Embdedding dimension.
+            d_model (int): Embdedding dimensionality.
             dropout_p (int): Dropout probability.
             max_len (int): Maximum length of sequence of embeddings to encode.
         """
@@ -27,7 +26,7 @@ class PositionalEncoder(nn.Module):
 
         self.dropout = nn.Dropout(dropout_p)
 
-        positions = torch.arange(0, max_len, dtype=torch.float)
+        positions = torch.arange(0, max_len)
         division_term = torch.pow(10000, torch.arange(0, d_model, 2) / d_model)
         fun_arg = positions.view(-1, 1) / division_term.view(1, -1)
 
@@ -40,7 +39,7 @@ class PositionalEncoder(nn.Module):
     def forward(self, embedding: torch.Tensor):
         return self.dropout(embedding + self.pos_encoding[:, :embedding.size(1)])
 
-class MyTransformer(nn.Module):
+class TranslationTransformer(nn.Module):
     """Wrapper of PyTorch's Transformer model for translation."""
 
     def __init__(self, num_src_tokens: int, num_tgt_tokens: int, 
@@ -98,9 +97,9 @@ class MyTransformer(nn.Module):
         device = next(self.parameters()).device
 
         if not tgt_mask:
-            tgt_mask = Transformer.generate_square_subsequent_mask(tgt.size(1), device=device)
-        src_padding_mask = MyTransformer.generate_padding_mask(src, pad_token_id=pad_token_id, device=device)
-        tgt_padding_mask = MyTransformer.generate_padding_mask(tgt, pad_token_id=pad_token_id, device=device)
+            tgt_mask = nn.Transformer.generate_square_subsequent_mask(tgt.size(1), device=device)
+        src_padding_mask = TranslationTransformer.generate_padding_mask(src, pad_token_id=pad_token_id, device=device)
+        tgt_padding_mask = TranslationTransformer.generate_padding_mask(tgt, pad_token_id=pad_token_id, device=device)
 
         src = self.src_embedding(src) * math.sqrt(self.d_model)
         tgt = self.tgt_embedding(tgt) * math.sqrt(self.d_model)
@@ -130,20 +129,20 @@ class MyTransformer(nn.Module):
             torch.Tensor
         """
 
-        return (sequences == pad_token_id).to(torch.float).to(device)
+        return (sequences == pad_token_id).to(device)
     
 def train_loop(
-        model: MyTransformer, dataloader: DataLoader, optimizer: torch.optim.Optimizer, 
-        loss_fn: torch.nn.Module, verbose: bool = False
+        model: nn.Module, dataloader: DataLoader, optimizer: torch.optim.Optimizer, 
+        loss_fn: nn.Module, verbose: bool = False
     ):
     """
-    Performs one epoch of MyTransformer model training.
+    Performs one epoch of model training.
 
     Args:
-        model (MyTransformer): The model to train.
+        model (nn.Module): The model to train.
         dataloader (DataLoader): Dataloader to train on.
         optimizer (torch.optim.Optimizer): Optimizer to train a model.
-        loss_fn (torch.nn.Module): The loss function to compute the training loss.
+        loss_fn (nn.Module): The loss function to compute the training loss.
         verbose (bool): Whether to show the training process.
 
     Returns:
@@ -176,19 +175,18 @@ def train_loop(
         dataset_processed_size += src.size(0)
 
         if verbose and batch_num % 100 == 0:
-            loss = loss.item()
-            print(f'loss: {loss:>7f} [{dataset_processed_size:>5}/{dataset_size:>5}]')
+            print(f'loss: {total_loss / batch_num :>7f} [{dataset_processed_size:>5}/{dataset_size:>5}]')
 
     return total_loss / len(dataloader)
 
-def validation_loop(model: MyTransformer, dataloader: DataLoader, loss_fn: torch.nn.Module):
+def validation_loop(model: nn.Module, dataloader: DataLoader, loss_fn: nn.Module):
     """
     Computes average loss on given dataloader.
 
     Args:
-        model (MyTransformer): The model to get scores.
+        model (nn.Module): The model to get scores.
         dataloader (DataLoader): Dataloader on which we want to compute average loss.
-        loss_fn (torch.nn.Module): The loss function.
+        loss_fn (nn.Module): The loss function.
 
     Returns:
         float: An average loss.
@@ -215,7 +213,7 @@ def validation_loop(model: MyTransformer, dataloader: DataLoader, loss_fn: torch
     return total_loss / len(dataloader)
 
 def fit(
-        model: MyTransformer, train_dataloader: DataLoader, val_dataloader: DataLoader, 
+        model: nn.Module, train_dataloader: DataLoader, val_dataloader: DataLoader, 
         optimizer: torch.optim.Optimizer, loss_fn: torch.nn.Module, num_epochs: int, 
         verbose: bool = False, save_file_path: str = './saved/model_weights.pth'
 ):
@@ -223,7 +221,7 @@ def fit(
     Performs model training on given dataloader.
     
     Args:
-        model (MyTransformer): A model to train.
+        model (nn.Module): A model to train.
         train_dataloader (DataLoader): A dataloader to fit.
         val_dataloader (DataLoader): A dataloader to validate.
         optimizer (torch.optim.Optimizer): An optimizer of model's parameters.
@@ -256,15 +254,15 @@ def fit(
 
     return train_loss_hist, val_loss_hist
 
-def greedy_translate(
-        model: MyTransformer, srcs: Iterable[torch.Tensor], max_length: int = 50,
+def greed_translate(
+        model: nn.Module, srcs: Iterable[torch.Tensor], max_length: int = 50,
         pad_token_id: int = 0, bos_token_id: int = 2, eos_token_id: int = 3
 ):
     """
     Performs greedy search to tranlate the sequence.
 
     Args:
-    model (MyTransformer): The model used for translation.
+    model (nn.Module): The model used for translation.
     srcs (Iterable[torch.Tensor]): The batches to translate.
     max_length (int, optional): Maximum length of tranlation sequence. Defaults to 50.
     pad_token_id (int, optional): [PAD] token id. Defaults to 0
@@ -280,8 +278,8 @@ def greedy_translate(
         for src in srcs:
             batch_size = src.size(0)
 
-            tgt = torch.full((batch_size, 1), bos_token_id, dtype=torch.long, device=device)
-            seq_score = torch.zeros((batch_size), dtype=torch.float, device=device)
+            tgt = torch.full((batch_size, 1), bos_token_id, device=device)
+            seq_score = torch.zeros((batch_size), device=device)
 
             for _ in range(max_length):
                 next_token_scores = model(src, tgt)[:, -1, :]
@@ -290,8 +288,7 @@ def greedy_translate(
                 
                 next_token_score, next_token_id = torch.max(next_token_scores, dim=-1)
 
-                is_sequence_ended = \
-                    (tgt[:, -1] == eos_token_id) | (tgt[:, -1] == pad_token_id)
+                is_sequence_ended = (tgt[:, -1] == eos_token_id) | (tgt[:, -1] == pad_token_id)
                 next_token_id[is_sequence_ended] = pad_token_id
                 next_token_score[is_sequence_ended] = 0
                 if torch.all(is_sequence_ended):
@@ -300,7 +297,7 @@ def greedy_translate(
                 tgt = torch.hstack((tgt, next_token_id.view(-1, 1)))
                 seq_score += next_token_score
 
-            seq_score /= (torch.count_nonzero(tgt != pad_token_id, dim=-1))
+            seq_score /= torch.count_nonzero(tgt != pad_token_id, dim=-1)
 
             result = dict()
             result['sequences'] = tgt
@@ -309,14 +306,14 @@ def greedy_translate(
 
 # Has a major bug
 def beam_translate(
-        model: MyTransformer, srcs: Iterable[torch.Tensor], num_beams: int = 10, max_length: int = 20, 
+        model: nn.Module, srcs: Iterable[torch.Tensor], num_beams: int = 10, max_length: int = 20, 
         pad_token_id: int = 0, bos_token_id: int = 2, eos_token_id: int = 3
 ):
     """
     Performs beam search to tranlate the sequence.
 
     Args:
-        model (MyTransformer): The model used for translation.
+        model (nn.Module): The model used for translation.
         srcs (Iterable[torch.Tensor]): The batches to translate.
         num_beams (int, optional): Number of beam hypothesis to keep track on. Defaults to 10
         max_length (int, optional): Maximum length of tranlation sequence. Defaults to 20
@@ -400,7 +397,7 @@ def beam_translate(
             result['sequence_scores'] = final_seqs['sequence_scores']
             yield result
 
-def check_positional_encoder():
+def check_positional_encoder(device: torch.device):
     print('Check PositionalEcoder:')
 
     DROPOUT_P = 0
@@ -408,7 +405,7 @@ def check_positional_encoder():
     SEQ_LEN = 5
     D_MODEL = 10
 
-    positional_encoder = PositionalEncoder(D_MODEL, DROPOUT_P, 100)
+    positional_encoder = PositionalEncoder(D_MODEL, DROPOUT_P, 100).to(device)
     encoded = positional_encoder(torch.zeros(BATCH_SIZE, SEQ_LEN, D_MODEL))
 
     for batch_num in range(BATCH_SIZE):
@@ -426,20 +423,21 @@ def check_positional_encoder():
                 print('diff:', correct - encoded[batch_num, pos, idx].item())
                 print('-' * 10)
 
-def check_my_transformer():
-    print('Check MyTransformer:')
+def check_translation_transformer(device: torch.device):
+    print('Check TranslationTransformer:')
 
-    SUBSET = 'val'
-    VOCABULARY_SIZE = 50000
+    SUBSET = 'train'
+    VOCABULARY_SIZE = 30000
 
     script_dir_path = os.path.dirname(__file__)
+
     dataset_dir_path = os.path.join(script_dir_path, 'dataset')
     save_dir_path = os.path.join(script_dir_path, 'saved')
-    saved_src_tokenizer_file_path = os.path.join(save_dir_path, 'src-tokenizer.json')
-    saved_dst_tokenizer_file_path = os.path.join(save_dir_path, 'dst-tokenizer.json')
+    src_tokenizer_save_file_path = os.path.join(save_dir_path, 'src-tokenizer.json')
+    dst_tokenizer_save_file_path = os.path.join(save_dir_path, 'dst-tokenizer.json')
 
-    src_tokenizer = Tokenizer.from_file(saved_src_tokenizer_file_path)
-    dst_tokenizer = Tokenizer.from_file(saved_dst_tokenizer_file_path)
+    src_tokenizer = Tokenizer.from_file(src_tokenizer_save_file_path)
+    dst_tokenizer = Tokenizer.from_file(dst_tokenizer_save_file_path)
 
     src_transform = Lambda(lambda src : torch.tensor(src_tokenizer.encode(src).ids))
     dst_transform = Lambda(lambda dst : torch.tensor(dst_tokenizer.encode(dst).ids))
@@ -455,10 +453,10 @@ def check_my_transformer():
 
     batch = next(iter(dataloader))
 
-    transformer = MyTransformer(
+    transformer = TranslationTransformer(
         VOCABULARY_SIZE, VOCABULARY_SIZE, 
         d_model=16, nhead=2, num_encoder_layers=2, num_decoder_layers=2, dim_feedforward=64
-    )
+    ).to(device)
     
     src, dst = batch
 
@@ -471,7 +469,7 @@ def check_my_transformer():
     print(out)
     print(out.shape)
 
-def check_train_loop():
+def check_train_loop(device: torch.device):
     print('Check train_loop:')
 
     VOCABULARY_SIZE = 30000
@@ -480,7 +478,7 @@ def check_train_loop():
     NUM_ENCODER_LAYERS = 1
     NUM_DECODER_LAYERS = 1
     DIM_FEEDFORWARD = 128
-    DROPOUT = 0
+    DROPOUT = 0.2
 
     NUM_SAMPLES = 10
 
@@ -490,34 +488,37 @@ def check_train_loop():
     script_dir_path = os.path.dirname(__file__)
 
     save_dir_path = os.path.join(script_dir_path, 'saved')
-    save_src_tokenizer_file_path = os.path.join(save_dir_path, 'src-tokenizer.json')
-    save_dst_tokenizer_file_path = os.path.join(save_dir_path, 'dst-tokenizer.json')
-    save_simple_model_weights_file_path = os.path.join(save_dir_path, 'simple_model_weights.pth')
+
+    src_tokenizer_save_file_path = os.path.join(save_dir_path, 'src-tokenizer.json')
+    dst_tokenizer_save_file_path = os.path.join(save_dir_path, 'dst-tokenizer.json')
+    simple_model_weights_save_file_path = os.path.join(save_dir_path, 'simple_model_weights.pth')
 
     dataset_dir_path = os.path.join(script_dir_path, 'dataset')
 
-    src_tokenizer = Tokenizer.from_file(save_src_tokenizer_file_path)
-    dst_tokenizer = Tokenizer.from_file(save_dst_tokenizer_file_path)
+    src_tokenizer = Tokenizer.from_file(src_tokenizer_save_file_path)
+    dst_tokenizer = Tokenizer.from_file(dst_tokenizer_save_file_path)
 
     src_transform = Lambda(lambda src : torch.tensor(src_tokenizer.encode(src).ids, dtype=torch.long))
     dst_transform = Lambda(lambda dst : torch.tensor(dst_tokenizer.encode(dst).ids, dtype=torch.long))
 
-    dataset = AlienDataset(dataset_dir_path, subset='train',
-                           src_transform=src_transform, dst_transform=dst_transform)
+    dataset = AlienDataset(
+        dataset_dir_path, subset='train',
+        src_transform=src_transform, dst_transform=dst_transform
+    )
     dataset = Subset(dataset, range(NUM_SAMPLES))
 
     collate_fn = (lambda sequences : bucket_collate_fn(sequences, is_test=False))
     dataloader = DataLoader(dataset, batch_size=NUM_SAMPLES, shuffle=True, collate_fn=collate_fn)
 
-    model = MyTransformer(
+    model = TranslationTransformer(
         VOCABULARY_SIZE, VOCABULARY_SIZE,
         d_model=D_MODEL, nhead=N_HEAD,
         num_encoder_layers=NUM_ENCODER_LAYERS, num_decoder_layers=NUM_DECODER_LAYERS,
         dim_feedforward=DIM_FEEDFORWARD, dropout=DROPOUT
-    )
+    ).to(device)
     
-    if os.path.isfile(save_simple_model_weights_file_path):
-        model.load_state_dict(torch.load(save_simple_model_weights_file_path, weights_only=True))
+    if os.path.isfile(simple_model_weights_save_file_path):
+        model.load_state_dict(torch.load(simple_model_weights_save_file_path, weights_only=True))
     else:
         optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
@@ -528,24 +529,10 @@ def check_train_loop():
 
             print(f'Epoch {epoch:3} training loss: {train_loss:.4f}')
 
-        torch.save(model.state_dict(), save_simple_model_weights_file_path)
+        torch.save(model.state_dict(), simple_model_weights_save_file_path)
 
-    with torch.no_grad():
-        model.eval()
-
-        for (srcs, dsts) in dataloader:
-            input_dsts = dsts[:, :-1]
-
-            scores = model(srcs, input_dsts)
-            preds = torch.argmax(scores, dim=-1)
-
-            for (dst, pred) in zip(dsts, preds):
-                print('actural translation:', dst_tokenizer.decode(dst.tolist()))
-                print('model translation:', dst_tokenizer.decode(pred.tolist()))
-                print('-' * 10)
-
-def check_greedy_translate():
-    print('Check greedy translate:')
+def check_greed_translate(device: torch.device):
+    print('Check greed_translate:')
 
     VOCABULARY_SIZE = 30000
     D_MODEL = 32
@@ -553,56 +540,58 @@ def check_greedy_translate():
     NUM_ENCODER_LAYERS = 1
     NUM_DECODER_LAYERS = 1
     DIM_FEEDFORWARD = 128
-    DROPOUT = 0
+    DROPOUT = 0.2
 
     NUM_SAMPLES = 5
 
     script_dir_path = os.path.dirname(__file__)
 
     save_dir_path = os.path.join(script_dir_path, 'saved')
-    save_src_tokenizer_file_path = os.path.join(save_dir_path, 'src-tokenizer.json')
-    save_dst_tokenizer_file_path = os.path.join(save_dir_path, 'dst-tokenizer.json')
-    save_model_weights_file_path = os.path.join(save_dir_path, 'simple_model_weights.pth')
+    src_tokenizer_save_file_path = os.path.join(save_dir_path, 'src-tokenizer.json')
+    dst_tokenizer_save_file_path = os.path.join(save_dir_path, 'dst-tokenizer.json')
+    model_weights_save_file_path = os.path.join(save_dir_path, 'simple_model_weights.pth')
 
     dataset_dir_path = os.path.join(script_dir_path, 'dataset')
 
-    src_tokenizer = Tokenizer.from_file(save_src_tokenizer_file_path)
-    dst_tokenizer = Tokenizer.from_file(save_dst_tokenizer_file_path)
+    src_tokenizer = Tokenizer.from_file(src_tokenizer_save_file_path)
+    dst_tokenizer = Tokenizer.from_file(dst_tokenizer_save_file_path)
 
     src_transform = Lambda(lambda src : torch.tensor(src_tokenizer.encode(src).ids, dtype=torch.long))
     dst_transform = Lambda(lambda dst : torch.tensor(dst_tokenizer.encode(dst).ids, dtype=torch.long))
 
-    dataset = AlienDataset(dataset_dir_path, subset='train',
-                           src_transform=src_transform, dst_transform=dst_transform)
+    dataset = AlienDataset(
+        dataset_dir_path, subset='train',
+        src_transform=src_transform, dst_transform=dst_transform
+    )
     dataset = Subset(dataset, range(NUM_SAMPLES))
 
     collate_fn = (lambda sequences : bucket_collate_fn(sequences, is_test=False))
     dataloader = DataLoader(dataset, batch_size=NUM_SAMPLES, shuffle=True, collate_fn=collate_fn)
 
-    model = MyTransformer(
+    model = TranslationTransformer(
         VOCABULARY_SIZE, VOCABULARY_SIZE,
         d_model=D_MODEL, nhead=N_HEAD,
         num_encoder_layers=NUM_ENCODER_LAYERS, num_decoder_layers=NUM_DECODER_LAYERS,
         dim_feedforward=DIM_FEEDFORWARD, dropout=DROPOUT
-    )
+    ).to(device)
     
-    model.load_state_dict(torch.load(save_model_weights_file_path, weights_only=True))
+    model.load_state_dict(torch.load(model_weights_save_file_path, weights_only=True))
 
     with torch.no_grad():
         collate_fn = (lambda sequences : bucket_collate_fn(sequences, is_test=False)[0])
         dataloader = DataLoader(dataset, batch_size=NUM_SAMPLES, shuffle=False, collate_fn=collate_fn)
 
-        preds = next(greedy_translate(model, dataloader))
+        preds = next(greed_translate(model, dataloader))
         seqs = preds['sequences']
         scores = preds['sequence_scores']
         for (dst, seq, score) in zip(dataset, seqs, scores):
             dst = dst[1]
             print('actural translation:', dst_tokenizer.decode(dst.tolist()))
-            print('model translation:', dst_tokenizer.decode(seq.tolist()))
+            print('greed translation:', dst_tokenizer.decode(seq.tolist()))
             print('score:', score.item())
             print('-' * 10)
 
-def check_beam_translate():
+def check_beam_translate(device: torch.device):
     print('Check beam translate:')
 
     VOCABULARY_SIZE = 50000
@@ -641,12 +630,12 @@ def check_beam_translate():
     collate_fn = (lambda sequences : bucket_collate_fn(sequences, is_test=False))
     dataloader = DataLoader(dataset, batch_size=NUM_SAMPLES, shuffle=True, collate_fn=collate_fn)
 
-    model = MyTransformer(
+    model = TranslationTransformer(
         VOCABULARY_SIZE, VOCABULARY_SIZE,
         d_model=D_MODEL, nhead=N_HEAD,
         num_encoder_layers=NUM_ENCODER_LAYERS, num_decoder_layers=NUM_DECODER_LAYERS,
         dim_feedforward=DIM_FEEDFORWARD, dropout=DROPOUT
-    )
+    ).to(device)
     
     model.load_state_dict(torch.load(save_model_weights_file_path, weights_only=True))
 
@@ -665,8 +654,11 @@ def check_beam_translate():
             print('-' * 10)
 
 if __name__ == '__main__':
-    check_positional_encoder()
-    check_my_transformer()
-    check_train_loop()
-    check_greedy_translate()
-    # check_beam_translate()
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    check_positional_encoder(device)
+    check_translation_transformer(device)
+    check_train_loop(device)
+    check_greed_translate(device)
+
+    # check_beam_translate(device)
