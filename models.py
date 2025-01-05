@@ -25,7 +25,6 @@ class Seq2Seq(nn.Module):
             num_layers=num_layers,
             batch_first=True,
             dropout=dropout,
-            device=device,
             dtype=torch.float
         )
 
@@ -35,11 +34,10 @@ class Seq2Seq(nn.Module):
             num_layers=num_layers,
             batch_first=True,
             dropout=dropout,
-            device=device,
             dtype=torch.float
         )
 
-        self.output_layer = nn.Linear(hidden_size, num_tgt_tokens, device=device, dtype=torch.float)
+        self.output_layer = nn.Linear(hidden_size, num_tgt_tokens, dtype=torch.float)
 
     def forward(self, inp: torch.Tensor, tgt: torch.Tensor):
         inp = F.one_hot(inp, num_classes=self.num_src_tokens).float()
