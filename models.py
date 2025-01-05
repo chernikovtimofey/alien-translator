@@ -47,7 +47,7 @@ class Seq2Seq(nn.Module):
         output, hidden = self.decoder(tgt, hidden)
         output = self.output_layer(output)
 
-        return output, hidden
+        return output
 
 class PositionalEncoder(nn.Module):
     """Module that encodes information about position into embedding."""
