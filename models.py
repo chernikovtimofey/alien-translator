@@ -9,6 +9,48 @@ from tokenizers import Tokenizer
 from transformers import BeamSearchScorer
 from data import *
 
+class Seq2Seq(nn.Module):
+    def __init__(
+        self, num_src_tokens: int, num_tgt_tokens: int,
+        hidden_size: int, num_layers: int = 1, dropout: int = 0, 
+    ):
+        super().__init__()
+
+        self.num_src_tokens = num_src_tokens
+        self.num_tgt_tokens = num_tgt_tokens
+
+        self.encoder = nn.LSTM(
+            num_src_tokens,
+            hidden_size=hidden_size, 
+            num_layers=num_layers,
+            batch_first=True,
+            dropout=dropout,
+            device=device,
+            dtype=torch.float
+        )
+
+        self.decoder = nn.LSTM(
+            num_tgt_tokens,
+            hidden_size=hidden_size, 
+            num_layers=num_layers,
+            batch_first=True,
+            dropout=dropout,
+            device=device,
+            dtype=torch.float
+        )
+
+        self.output_layer = nn.Linear(hidden_size, num_tgt_tokens, device=device, dtype=torch.float)
+
+    def forward(self, inp: torch.Tensor, tgt: torch.Tensor):
+        inp = F.one_hot(inp, num_classes=self.num_src_tokens).float()
+        tgt = F.one_hot(tgt, num_classes=self.num_tgt_tokens).float()
+
+        _, hidden = self.encoder(inp)
+        output, hidden = self.decoder(tgt, hidden)
+        output = self.output_layer(output)
+
+        return output, hidden
+
 class PositionalEncoder(nn.Module):
     """Module that encodes information about position into embedding."""
 
@@ -78,7 +120,7 @@ class TranslationTransformer(nn.Module):
             batch_first=True
         )
 
-        self.out_layer = nn.Linear(d_model, num_tgt_tokens)
+        self.output_layer = nn.Linear(d_model, num_tgt_tokens)
 
     def forward(
             self, src: torch.Tensor, tgt: torch.Tensor, tgt_mask: torch.Tensor = None, pad_token_id: int = 0
@@ -107,14 +149,14 @@ class TranslationTransformer(nn.Module):
         src = self.positional_encoder(src)
         tgt = self.positional_encoder(tgt)
 
-        out = self.transformer(
+        output = self.transformer(
             src, tgt, 
             tgt_mask=tgt_mask, 
             src_key_padding_mask=src_padding_mask,
             tgt_key_padding_mask=tgt_padding_mask
         )
-        out = self.out_layer(out)
-        return out
+        output = self.output_layer(output)
+        return output
     
     def generate_padding_mask(sequences: torch.Tensor, pad_token_id: int = 0, device: Union[torch.device, str] = torch.device('cpu')):
         """
@@ -397,6 +439,52 @@ def beam_translate(
             result['sequence_scores'] = final_seqs['sequence_scores']
             yield result
 
+def check_seq2seq(device: torch.device):
+    print('Check Seq2Seq:')
+
+    SUBSET = 'train'
+    VOCABULARY_SIZE = 30000
+
+    script_dir_path = os.path.dirname(__file__)
+
+    dataset_dir_path = os.path.join(script_dir_path, 'dataset')
+    save_dir_path = os.path.join(script_dir_path, 'saved')
+    src_tokenizer_save_file_path = os.path.join(save_dir_path, 'src-tokenizer.json')
+    dst_tokenizer_save_file_path = os.path.join(save_dir_path, 'dst-tokenizer.json')
+
+    src_tokenizer = Tokenizer.from_file(src_tokenizer_save_file_path)
+    dst_tokenizer = Tokenizer.from_file(dst_tokenizer_save_file_path)
+
+    src_transform = Lambda(lambda src : torch.tensor(src_tokenizer.encode(src).ids))
+    dst_transform = Lambda(lambda dst : torch.tensor(dst_tokenizer.encode(dst).ids))
+
+    dataset = AlienDataset(
+        dataset_dir_path, subset=SUBSET, 
+        src_transform=src_transform, dst_transform=dst_transform
+    )
+
+    batch_sampler = BucketSampler(dataset, is_test=(SUBSET == 'test'), batch_size=4, bucket_size=5, shuffle=False)
+    collate_fn = (lambda sequences : bucket_collate_fn(sequences, is_test=(SUBSET == 'test')))
+    dataloader = DataLoader(dataset, batch_sampler=batch_sampler, collate_fn=collate_fn)
+
+    batch = next(iter(dataloader))
+
+    src, dst = batch
+
+    seq2seq = Seq2Seq(
+        VOCABULARY_SIZE, VOCABULARY_SIZE,
+        hidden_size=32, num_layers=1, dropout=0
+    ).to(device)
+
+    print('input:')
+    print(src)
+    print(dst)
+
+    print('output:')
+    output, _ = seq2seq(src, dst)
+    print(output)
+    print(output.shape)
+
 def check_positional_encoder(device: torch.device):
     print('Check PositionalEcoder:')
 
@@ -453,12 +541,12 @@ def check_translation_transformer(device: torch.device):
 
     batch = next(iter(dataloader))
 
+    src, dst = batch
+
     transformer = TranslationTransformer(
         VOCABULARY_SIZE, VOCABULARY_SIZE, 
         d_model=16, nhead=2, num_encoder_layers=2, num_decoder_layers=2, dim_feedforward=64
     ).to(device)
-    
-    src, dst = batch
 
     print('input:')
     print(src)
@@ -656,6 +744,7 @@ def check_beam_translate(device: torch.device):
 if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+    check_seq2seq(device)
     check_positional_encoder(device)
     check_translation_transformer(device)
     check_train_loop(device)
