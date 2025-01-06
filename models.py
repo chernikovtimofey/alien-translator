@@ -177,7 +177,8 @@ class TranslationTransformer(nn.Module):
     
 def train_loop(
         model: nn.Module, dataloader: DataLoader, optimizer: torch.optim.Optimizer, 
-        loss_fn: nn.Module, verbose: bool = False
+        loss_fn: nn.Module, lr_scheduler: torch.optim.lr_scheduler._LRScheduler = None, 
+        verbose: bool = False
     ):
     """
     Performs one epoch of model training.
@@ -187,6 +188,7 @@ def train_loop(
         dataloader (DataLoader): Dataloader to train on.
         optimizer (torch.optim.Optimizer): Optimizer to train a model.
         loss_fn (nn.Module): The loss function to compute the training loss.
+        lr_scheduler (torch.optim.lr_scheduler._LRScheduler): Learning rate scheduler. Defaults to None.
         verbose (bool): Whether to show the training process.
 
     Returns:
@@ -218,8 +220,15 @@ def train_loop(
         total_loss += loss.item()
         dataset_processed_size += src.size(0)
 
-        if verbose and batch_num % 100 == 0:
-            print(f'loss: {loss.item():>7f} [{dataset_processed_size:>5}/{dataset_size:>5}]')
+        if batch_num % 100 == 0:
+            if lr_scheduler:
+                lr_scheduler.step()
+
+            if verbose:
+                print(f'loss: {loss.item():>7f} [{dataset_processed_size:>5}/{dataset_size:>5}])', end='')
+                if lr_scheduler:
+                    print(f' | LR: {lr_scheduler.get_last_lr()[0]}')
+                print()
 
     return total_loss / len(dataloader)
 
@@ -259,6 +268,7 @@ def validation_loop(model: nn.Module, dataloader: DataLoader, loss_fn: nn.Module
 def fit(
         model: nn.Module, train_dataloader: DataLoader, val_dataloader: DataLoader, 
         optimizer: torch.optim.Optimizer, loss_fn: torch.nn.Module, num_epochs: int, 
+        lr_scheduler: torch.optim.lr_scheduler._LRScheduler = None,
         verbose: bool = False, save_file_path: str = './saved/model_weights.pth'
 ):
     """
@@ -271,6 +281,7 @@ def fit(
         optimizer (torch.optim.Optimizer): An optimizer of model's parameters.
         loss_fn (torch.nn.Module): The loss function to compute the training loss.
         num_epochs (int): Number of epochs to perform.
+        lr_scheduler (torch.optim.lr_scheduler._LRScheduler): Learning rate scheduler. Defaults to None.
         verbose (bool, optional): Whether to show the training process. Defaults to False.
         save_file_path (str, optional): A file path to save model parameters after every epoch. Defaults to './saved/model_weights.pth'.
 
@@ -284,7 +295,7 @@ def fit(
     for epoch in range(1, num_epochs + 1):
         print('-' * 25, f'Epoch {epoch}', '-' * 25)
 
-        train_loss = train_loop(model, train_dataloader, optimizer, loss_fn, verbose=verbose)
+        train_loss = train_loop(model, train_dataloader, optimizer, loss_fn, lr_scheduler=lr_scheduler, verbose=verbose)
         torch.save(model.state_dict(), os.path.join(save_file_path))
         train_loss_hist.append(train_loss)
 
@@ -627,10 +638,10 @@ def check_transformer_train_loop(device: torch.device):
     DIM_FEEDFORWARD = 128
     DROPOUT = 0
 
-    NUM_SAMPLES = 10
+    NUM_SAMPLES = 30
 
     LEARNING_RATE = 0.01
-    NUM_EPOCHS = 30
+    NUM_EPOCHS = 50
 
     script_dir_path = os.path.dirname(__file__)
 
@@ -807,10 +818,10 @@ def check_beam_translate(device: torch.device):
 if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    # check_seq2seq(device)
-    # check_positional_encoder(device)
-    # check_translation_transformer(device)
-    # check_seq2seq_train_loop(device)
+    check_seq2seq(device)
+    check_positional_encoder(device)
+    check_translation_transformer(device)
+    check_seq2seq_train_loop(device)
     check_transformer_train_loop(device)
     check_greed_translate(device)
     check_beam_translate(device)
