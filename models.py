@@ -219,7 +219,7 @@ def train_loop(
         dataset_processed_size += src.size(0)
 
         if verbose and batch_num % 100 == 0:
-            print(f'loss: {total_loss / batch_num :>7f} [{dataset_processed_size:>5}/{dataset_size:>5}]')
+            print(f'loss: {loss.item():>7f} [{dataset_processed_size:>5}/{dataset_size:>5}]')
 
     return total_loss / len(dataloader)
 
@@ -606,19 +606,16 @@ def check_seq2seq_train_loop(device: torch.device):
         hidden_size=HIDDEN_SIZE, num_layers=NUM_LAYERS, dropout=DROPOUT
     ).to(device)
 
-    if os.path.isfile(simple_model_weights_save_file_path):
-        model.load_state_dict(torch.load(simple_model_weights_save_file_path, weights_only=True))
-    else:
-        optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
-        loss_fn = nn.CrossEntropyLoss()
+    loss_fn = nn.CrossEntropyLoss()
 
-        for epoch in range(1, NUM_EPOCHS + 1):
-            train_loss = train_loop(model, dataloader, optimizer, loss_fn, verbose=False)
+    for epoch in range(1, NUM_EPOCHS + 1):
+        train_loss = train_loop(model, dataloader, optimizer, loss_fn, verbose=False)
 
-            print(f'Epoch {epoch:3} training loss: {train_loss:.4f}')
+        print(f'Epoch {epoch:3} training loss: {train_loss:.4f}')
 
-        torch.save(model.state_dict(), simple_model_weights_save_file_path)
+    torch.save(model.state_dict(), simple_model_weights_save_file_path)
 
 def check_transformer_train_loop(device: torch.device):
     print("Check transformer's train_loop:")

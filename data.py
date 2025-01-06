@@ -229,7 +229,7 @@ def bucket_collate_fn(
 def check_make_src_tokenizer():
     print('Check make_src_tokenizer:')
 
-    VOCABULARY_SIZE = 30000
+    VOCABULARY_SIZE = 6000
 
     script_dir_path = os.path.dirname(__file__)
 
@@ -262,7 +262,7 @@ def check_make_src_tokenizer():
 def check_make_dst_tokenizer():
     print('Check make_dst_tokenizer:')
 
-    VOCABULARY_SIZE = 30000
+    VOCABULARY_SIZE = 6000
 
     script_dir_path = os.path.dirname(__file__)
 
