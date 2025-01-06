@@ -222,7 +222,7 @@ def train_loop(
 
         if batch_num % 100 == 0:
             if lr_scheduler:
-                lr_scheduler.step()
+                lr_scheduler.step(loss)
 
             if verbose:
                 print(f'loss: {loss.item():>7f} [{dataset_processed_size:>5}/{dataset_size:>5}])', end='')
