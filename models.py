@@ -170,7 +170,7 @@ class TranslationTransformer(nn.Module):
             device (Union[torch.device, str]): Device to put the returned mask on. Defaults to CPU.
 
         Returns:
-            torch.Tensor
+            torch.Tensor.
         """
 
         return (sequences == pad_token_id).to(device)
@@ -309,9 +309,9 @@ def greed_translate(
     model (nn.Module): The model used for translation.
     srcs (Iterable[torch.Tensor]): The batches to translate.
     max_length (int, optional): Maximum length of tranlation sequence. Defaults to 50.
-    pad_token_id (int, optional): [PAD] token id. Defaults to 0
-    bos_token_id (int, optional): [BOS] token id. Defaults to 2
-    eos_token_id (int, optional): [EOS] token id. Defaults to 3
+    pad_token_id (int, optional): [PAD] token id. Defaults to 0.
+    bos_token_id (int, optional): [BOS] token id. Defaults to 2.
+    eos_token_id (int, optional): [EOS] token id. Defaults to 3.
     """
 
     model.eval()
@@ -350,7 +350,7 @@ def greed_translate(
 
 # Has a major bug
 def beam_translate(
-        model: nn.Module, srcs: Iterable[torch.Tensor], num_beams: int = 10, max_length: int = 20, 
+        model: nn.Module, srcs: Iterable[torch.Tensor], num_beams: int = 10, max_length: int = 30, 
         pad_token_id: int = 0, bos_token_id: int = 2, eos_token_id: int = 3
 ):
     """
@@ -359,11 +359,11 @@ def beam_translate(
     Args:
         model (nn.Module): The model used for translation.
         srcs (Iterable[torch.Tensor]): The batches to translate.
-        num_beams (int, optional): Number of beam hypothesis to keep track on. Defaults to 10
-        max_length (int, optional): Maximum length of tranlation sequence. Defaults to 20
-        pad_token_id (int, optional): [PAD] token id. Defaults to 0
-        bos_token_id (int, optional): [BOS] token id. Defaults to 2
-        eos_token_id (int, optional): [EOS] token id. Defaults to 3
+        num_beams (int, optional): Number of beam hypothesis to keep track on. Defaults to 10.
+        max_length (int, optional): Maximum length of tranlation sequence. Defaults to 30.
+        pad_token_id (int, optional): [PAD] token id. Defaults to 0.
+        bos_token_id (int, optional): [BOS] token id. Defaults to 2.
+        eos_token_id (int, optional): [EOS] token id. Defaults to 3.
 
     Returns:
         torch.Tensor: Translated sequences.
@@ -384,15 +384,15 @@ def beam_translate(
                 max_length=max_length
             )
 
-            input_dst = torch.full((batch_size, 1), bos_token_id, dtype=torch.long, device=device)
+            tgt = torch.full((batch_size, 1), bos_token_id, device=device)
 
-            beam_scores = torch.zeros((batch_size), dtype=torch.float, device=device)
+            beam_scores = torch.zeros((batch_size), device=device)
 
             next_token_ids = None
             next_beam_ids = None
 
             for step in range(1, max_length + 1):  
-                next_token_scores = model(src, input_dst)[:, -1, :]
+                next_token_scores = model(src, tgt)[:, -1, :]
                 next_token_scores[:, pad_token_id] = float('-inf') 
                 next_token_scores = F.log_softmax(next_token_scores, dim=-1)
                 
@@ -414,12 +414,10 @@ def beam_translate(
                     src = src.unsqueeze(1).repeat(1, num_beams, 1)
                     src = src.view((batch_size * num_beams, -1))
 
-                    input_dst = torch.full((batch_size * num_beams, 1), bos_token_id, dtype=torch.long, device=device)
-
-                    beam_scores = torch.zeros((batch_size * num_beams), dtype=torch.float, device=device)
+                    tgt = torch.full((batch_size * num_beams, 1), bos_token_id, dtype=torch.long, device=device)
 
                 nexts = beam_scorer.process(
-                    input_dst, next_seq_scores, next_token_ids, next_token_beams, 
+                    tgt, next_seq_scores, next_token_ids, next_token_beams, 
                     pad_token_id=pad_token_id, eos_token_id=eos_token_id
                 )
                 beam_scores = nexts['next_beam_scores']
@@ -430,10 +428,10 @@ def beam_translate(
                     break
 
                 if step != max_length:
-                    input_dst = torch.hstack((input_dst[next_token_beams], next_token_ids.view(-1, 1)))
+                    tgt = torch.hstack((tgt[next_token_beams], next_token_ids.view(-1, 1)))
 
             final_seqs = beam_scorer.finalize(
-                input_dst, beam_scores, next_token_ids, next_beam_ids, max_length,
+                tgt, beam_scores, next_token_ids, next_beam_ids, max_length,
                 pad_token_id=pad_token_id, eos_token_id=eos_token_id
             )
             result = dict()
@@ -445,7 +443,7 @@ def check_seq2seq(device: torch.device):
     print('Check Seq2Seq:')
 
     SUBSET = 'train'
-    VOCABULARY_SIZE = 30000
+    VOCABULARY_SIZE = 6000
 
     script_dir_path = os.path.dirname(__file__)
 
@@ -517,7 +515,7 @@ def check_translation_transformer(device: torch.device):
     print('Check TranslationTransformer:')
 
     SUBSET = 'train'
-    VOCABULARY_SIZE = 30000
+    VOCABULARY_SIZE = 6000
 
     script_dir_path = os.path.dirname(__file__)
 
@@ -562,7 +560,7 @@ def check_translation_transformer(device: torch.device):
 def check_seq2seq_train_loop(device: torch.device):
     print("Check seq2seq's train_loop:")
 
-    VOCABULARY_SIZE = 30000
+    VOCABULARY_SIZE = 6000
     
     SRC_EMBEDDING_SIZE = 32
     TGT_EMBEDDING_SIZE = 32
@@ -620,19 +618,19 @@ def check_seq2seq_train_loop(device: torch.device):
 def check_transformer_train_loop(device: torch.device):
     print("Check transformer's train_loop:")
 
-    VOCABULARY_SIZE = 30000
+    VOCABULARY_SIZE = 6000
 
     D_MODEL = 32
     N_HEAD = 1
     NUM_ENCODER_LAYERS = 1
     NUM_DECODER_LAYERS = 1
     DIM_FEEDFORWARD = 128
-    DROPOUT = 0.2
+    DROPOUT = 0
 
     NUM_SAMPLES = 10
 
     LEARNING_RATE = 0.01
-    NUM_EPOCHS = 150
+    NUM_EPOCHS = 30
 
     script_dir_path = os.path.dirname(__file__)
 
@@ -683,22 +681,25 @@ def check_transformer_train_loop(device: torch.device):
 def check_greed_translate(device: torch.device):
     print('Check greed_translate:')
 
-    VOCABULARY_SIZE = 30000
+    VOCABULARY_SIZE = 6000
+
     D_MODEL = 32
     N_HEAD = 1
     NUM_ENCODER_LAYERS = 1
     NUM_DECODER_LAYERS = 1
     DIM_FEEDFORWARD = 128
-    DROPOUT = 0.2
+    DROPOUT = 0
 
-    NUM_SAMPLES = 5
+    NUM_SAMPLES = 10
+
+    MAX_LENGTH = 30
 
     script_dir_path = os.path.dirname(__file__)
 
     save_dir_path = os.path.join(script_dir_path, 'saved')
     src_tokenizer_save_file_path = os.path.join(save_dir_path, 'src-tokenizer.json')
     dst_tokenizer_save_file_path = os.path.join(save_dir_path, 'dst-tokenizer.json')
-    model_weights_save_file_path = os.path.join(save_dir_path, 'simple_model_weights.pth')
+    model_weights_save_file_path = os.path.join(save_dir_path, 'simple_transformer_model_weights.pth')
 
     dataset_dir_path = os.path.join(script_dir_path, 'dataset')
 
@@ -724,13 +725,13 @@ def check_greed_translate(device: torch.device):
         dim_feedforward=DIM_FEEDFORWARD, dropout=DROPOUT
     ).to(device)
     
-    model.load_state_dict(torch.load(model_weights_save_file_path, weights_only=True))
+    model.load_state_dict(torch.load(model_weights_save_file_path, weights_only=True, map_location=device))
 
     with torch.no_grad():
         collate_fn = (lambda sequences : bucket_collate_fn(sequences, is_test=False)[0])
         dataloader = DataLoader(dataset, batch_size=NUM_SAMPLES, shuffle=False, collate_fn=collate_fn)
 
-        preds = next(greed_translate(model, dataloader))
+        preds = next(greed_translate(model, dataloader, max_length=MAX_LENGTH))
         seqs = preds['sequences']
         scores = preds['sequence_scores']
         for (dst, seq, score) in zip(dataset, seqs, scores):
@@ -741,9 +742,10 @@ def check_greed_translate(device: torch.device):
             print('-' * 10)
 
 def check_beam_translate(device: torch.device):
-    print('Check beam translate:')
+    print('Check beam_translate:')
 
-    VOCABULARY_SIZE = 50000
+    VOCABULARY_SIZE = 6000
+
     D_MODEL = 32
     N_HEAD = 1
     NUM_ENCODER_LAYERS = 1
@@ -755,19 +757,19 @@ def check_beam_translate(device: torch.device):
 
     NUM_BEAMS = 5
 
-    MAX_LENGTH = 50
+    MAX_LENGTH = 30
 
     script_dir_path = os.path.dirname(__file__)
 
     save_dir_path = os.path.join(script_dir_path, 'saved')
-    save_src_tokenizer_file_path = os.path.join(save_dir_path, 'src-tokenizer.json')
-    save_dst_tokenizer_file_path = os.path.join(save_dir_path, 'dst-tokenizer.json')
-    save_model_weights_file_path = os.path.join(save_dir_path, 'simple_model_weights.pth')
+    src_tokenizer_save_file_path = os.path.join(save_dir_path, 'src-tokenizer.json')
+    dst_tokenizer_save_file_path = os.path.join(save_dir_path, 'dst-tokenizer.json')
+    model_weights_save_file_path = os.path.join(save_dir_path, 'simple_transformer_model_weights.pth')
 
     dataset_dir_path = os.path.join(script_dir_path, 'dataset')
 
-    src_tokenizer = Tokenizer.from_file(save_src_tokenizer_file_path)
-    dst_tokenizer = Tokenizer.from_file(save_dst_tokenizer_file_path)
+    src_tokenizer = Tokenizer.from_file(src_tokenizer_save_file_path)
+    dst_tokenizer = Tokenizer.from_file(dst_tokenizer_save_file_path)
 
     src_transform = Lambda(lambda src : torch.tensor(src_tokenizer.encode(src).ids, dtype=torch.long))
     dst_transform = Lambda(lambda dst : torch.tensor(dst_tokenizer.encode(dst).ids, dtype=torch.long))
@@ -786,7 +788,7 @@ def check_beam_translate(device: torch.device):
         dim_feedforward=DIM_FEEDFORWARD, dropout=DROPOUT
     ).to(device)
     
-    model.load_state_dict(torch.load(save_model_weights_file_path, weights_only=True))
+    model.load_state_dict(torch.load(model_weights_save_file_path, weights_only=True, map_location=device))
 
     with torch.no_grad():
         collate_fn = (lambda sequences : bucket_collate_fn(sequences, is_test=False)[0])
@@ -798,7 +800,7 @@ def check_beam_translate(device: torch.device):
         for (dst, seq, score) in zip(dataset, sequences, scores):
             dst = dst[1]
             print('actural translation:', dst_tokenizer.decode(dst.tolist()))
-            print('model translation:', dst_tokenizer.decode(seq.tolist()))
+            print('beam translation:', dst_tokenizer.decode(seq.tolist()))
             print('score:', score.item())
             print('-' * 10)
 
@@ -808,8 +810,7 @@ if __name__ == '__main__':
     # check_seq2seq(device)
     # check_positional_encoder(device)
     # check_translation_transformer(device)
-    check_seq2seq_train_loop(device)
-    # check_transformer_train_loop(device)
-    # check_greed_translate(device)
-
-    # check_beam_translate(device)
+    # check_seq2seq_train_loop(device)
+    check_transformer_train_loop(device)
+    check_greed_translate(device)
+    check_beam_translate(device)
