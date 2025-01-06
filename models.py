@@ -177,8 +177,7 @@ class TranslationTransformer(nn.Module):
     
 def train_loop(
         model: nn.Module, dataloader: DataLoader, optimizer: torch.optim.Optimizer, 
-        loss_fn: nn.Module, lr_scheduler: torch.optim.lr_scheduler._LRScheduler = None, 
-        verbose: bool = False
+        loss_fn: nn.Module, verbose: bool = False
     ):
     """
     Performs one epoch of model training.
@@ -188,7 +187,6 @@ def train_loop(
         dataloader (DataLoader): Dataloader to train on.
         optimizer (torch.optim.Optimizer): Optimizer to train a model.
         loss_fn (nn.Module): The loss function to compute the training loss.
-        lr_scheduler (torch.optim.lr_scheduler._LRScheduler): Learning rate scheduler. Defaults to None.
         verbose (bool): Whether to show the training process.
 
     Returns:
@@ -220,15 +218,8 @@ def train_loop(
         total_loss += loss.item()
         dataset_processed_size += src.size(0)
 
-        if batch_num % 100 == 0:
-            if lr_scheduler:
-                lr_scheduler.step(loss)
-
-            if verbose:
-                print(f'loss: {loss.item():>7f} [{dataset_processed_size:>5}/{dataset_size:>5}])', end='')
-                if lr_scheduler:
-                    print(f' | LR: {lr_scheduler.get_last_lr()[0]}')
-                print()
+        if batch_num % 100 == 0 and verbose:
+            print(f'loss: {loss.item():>7f} [{dataset_processed_size:>5}/{dataset_size:>5}])')
 
     return total_loss / len(dataloader)
 
@@ -295,15 +286,16 @@ def fit(
     for epoch in range(1, num_epochs + 1):
         print('-' * 25, f'Epoch {epoch}', '-' * 25)
 
-        train_loss = train_loop(model, train_dataloader, optimizer, loss_fn, lr_scheduler=lr_scheduler, verbose=verbose)
+        train_loss = train_loop(model, train_dataloader, optimizer, loss_fn, verbose=verbose)
         torch.save(model.state_dict(), os.path.join(save_file_path))
         train_loss_hist.append(train_loss)
+        lr_scheduler.step(train_loss)
 
         val_loss = validation_loop(model, val_dataloader, loss_fn)
         val_loss_hist.append(val_loss)
 
         if verbose:
-            print(f'Training loss: {train_loss:.4f}')
+            print(f'Training loss: {train_loss:.4f} | LR: {lr_scheduler.get_last_lr()}')
             print(f'Validation loss: {val_loss:.4f}')
             print()
 
