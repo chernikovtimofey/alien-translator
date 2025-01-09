@@ -297,7 +297,7 @@ def fit(
         if verbose:
             print(f'Training loss: {train_loss:.4f}')
             print(f'Validation loss: {val_loss:.4f}')
-            print(f'Next learning rate: {lr_scheduler.get_last_lr()[0]:.4f}')
+            print(f'Next learning rate: {lr_scheduler.get_last_lr()[0]:.8f}')
 
     return train_loss_hist, val_loss_hist
 
