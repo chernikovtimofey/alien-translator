@@ -309,7 +309,6 @@ def greed_translate(
 
             yield tgt, seq_score
 
-# Has a major bug
 def beam_translate(
         model: nn.Module, srcs: Iterable[torch.Tensor], num_beams: int = 10, max_length: int = 30, 
         pad_token_id: int = 0, bos_token_id: int = 2, eos_token_id: int = 3
@@ -362,7 +361,7 @@ def beam_translate(
                 next_seq_scores, next_token_ids = torch.topk(
                     next_seq_scores, 
                     2*num_beams, 
-                    dim=-1, sorted=False
+                    dim=-1, sorted=True
                 )
 
                 next_token_beams = (next_token_ids // vocabulary_size)
@@ -606,7 +605,7 @@ def check_beam_translate(device: torch.device):
 
     NUM_SAMPLES = 10
 
-    NUM_BEAMS = 5
+    NUM_BEAMS = 10
 
     MAX_LENGTH = 30
 
