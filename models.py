@@ -260,7 +260,7 @@ def fit(
         model: nn.Module, train_dataloader: DataLoader, val_dataloader: DataLoader, 
         optimizer: torch.optim.Optimizer, loss_fn: torch.nn.Module, num_epochs: int, 
         lr_scheduler: torch.optim.lr_scheduler._LRScheduler = None,
-        verbose: bool = False, save_file_path: str = './saved/model_weights.pth'
+        verbose: bool = False, save_file_path: str = './saved/model-weights.pth'
 ):
     """
     Performs model training on given dataloader.
@@ -315,6 +315,11 @@ def greed_translate(
     pad_token_id (int, optional): [PAD] token id. Defaults to 0.
     bos_token_id (int, optional): [BOS] token id. Defaults to 2.
     eos_token_id (int, optional): [EOS] token id. Defaults to 3.
+    
+    Returns:
+        list[tuple]: A list of translation sequences and scores for each batch. Each tuple contains:
+            - torch.Tensor: translation of sequences.
+            - float: scores of translations.
     """
 
     model.eval()
@@ -346,10 +351,7 @@ def greed_translate(
 
             seq_score /= torch.count_nonzero(tgt != pad_token_id, dim=-1)
 
-            result = dict()
-            result['sequences'] = tgt
-            result['sequence_scores'] = seq_score 
-            yield result
+            yield tgt, seq_score
 
 # Has a major bug
 def beam_translate(
@@ -367,9 +369,6 @@ def beam_translate(
         pad_token_id (int, optional): [PAD] token id. Defaults to 0.
         bos_token_id (int, optional): [BOS] token id. Defaults to 2.
         eos_token_id (int, optional): [EOS] token id. Defaults to 3.
-
-    Returns:
-        torch.Tensor: Translated sequences.
     """
 
     model.eval()
