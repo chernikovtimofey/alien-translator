@@ -392,10 +392,8 @@ def beam_translate(
                 tgt, beam_scores, next_token_ids, next_beam_ids, max_length,
                 pad_token_id=pad_token_id, eos_token_id=eos_token_id
             )
-            result = dict()
-            result['sequences'] = final_seqs['sequences']
-            result['sequence_scores'] = final_seqs['sequence_scores']
-            yield result
+            
+            yield final_seqs['sequences'], final_seqs['sequence_scores']
 
 def check_positional_encoder(device: torch.device):
     print('Check PositionalEcoder:')
@@ -406,7 +404,7 @@ def check_positional_encoder(device: torch.device):
     D_MODEL = 10
 
     positional_encoder = PositionalEncoder(D_MODEL, DROPOUT_P, 100).to(device)
-    encoded = positional_encoder(torch.zeros(BATCH_SIZE, SEQ_LEN, D_MODEL))
+    encoded = positional_encoder(torch.zeros(BATCH_SIZE, SEQ_LEN, D_MODEL, device=device))
 
     for batch_num in range(BATCH_SIZE):
         for pos in range(SEQ_LEN):
@@ -439,8 +437,8 @@ def check_translation_transformer(device: torch.device):
     src_tokenizer = Tokenizer.from_file(src_tokenizer_save_file_path)
     dst_tokenizer = Tokenizer.from_file(dst_tokenizer_save_file_path)
 
-    src_transform = Lambda(lambda src : torch.tensor(src_tokenizer.encode(src).ids))
-    dst_transform = Lambda(lambda dst : torch.tensor(dst_tokenizer.encode(dst).ids))
+    src_transform = Lambda(lambda src : torch.tensor(src_tokenizer.encode(src).ids, device=device))
+    dst_transform = Lambda(lambda dst : torch.tensor(dst_tokenizer.encode(dst).ids, device=device))
 
     dataset = AlienDataset(
         dataset_dir_path, subset=SUBSET, 
@@ -492,7 +490,7 @@ def check_transformer_train_loop(device: torch.device):
 
     src_tokenizer_save_file_path = os.path.join(save_dir_path, 'src-tokenizer.json')
     dst_tokenizer_save_file_path = os.path.join(save_dir_path, 'dst-tokenizer.json')
-    simple_model_weights_save_file_path = os.path.join(save_dir_path, 'simple_transformer_model_weights.pth')
+    simple_model_weights_save_file_path = os.path.join(save_dir_path, 'simple-transformer-model-weights.pth')
 
     dataset_dir_path = os.path.join(script_dir_path, 'dataset')
 
@@ -553,15 +551,15 @@ def check_greed_translate(device: torch.device):
     save_dir_path = os.path.join(script_dir_path, 'saved')
     src_tokenizer_save_file_path = os.path.join(save_dir_path, 'src-tokenizer.json')
     dst_tokenizer_save_file_path = os.path.join(save_dir_path, 'dst-tokenizer.json')
-    model_weights_save_file_path = os.path.join(save_dir_path, 'simple_transformer_model_weights.pth')
+    model_weights_save_file_path = os.path.join(save_dir_path, 'simple-transformer-model-weights.pth')
 
     dataset_dir_path = os.path.join(script_dir_path, 'dataset')
 
     src_tokenizer = Tokenizer.from_file(src_tokenizer_save_file_path)
     dst_tokenizer = Tokenizer.from_file(dst_tokenizer_save_file_path)
 
-    src_transform = Lambda(lambda src : torch.tensor(src_tokenizer.encode(src).ids, dtype=torch.long))
-    dst_transform = Lambda(lambda dst : torch.tensor(dst_tokenizer.encode(dst).ids, dtype=torch.long))
+    src_transform = Lambda(lambda src : torch.tensor(src_tokenizer.encode(src).ids, dtype=torch.long).to(device))
+    dst_transform = Lambda(lambda dst : torch.tensor(dst_tokenizer.encode(dst).ids, dtype=torch.long).to(device))
 
     dataset = AlienDataset(
         dataset_dir_path, subset='train',
@@ -586,8 +584,7 @@ def check_greed_translate(device: torch.device):
         dataloader = DataLoader(dataset, batch_size=NUM_SAMPLES, shuffle=False, collate_fn=collate_fn)
 
         preds = next(greed_translate(model, dataloader, max_length=MAX_LENGTH))
-        seqs = preds['sequences']
-        scores = preds['sequence_scores']
+        seqs, scores = preds
         for (dst, seq, score) in zip(dataset, seqs, scores):
             dst = dst[1]
             print('actural translation:', dst_tokenizer.decode(dst.tolist()))
@@ -618,15 +615,15 @@ def check_beam_translate(device: torch.device):
     save_dir_path = os.path.join(script_dir_path, 'saved')
     src_tokenizer_save_file_path = os.path.join(save_dir_path, 'src-tokenizer.json')
     dst_tokenizer_save_file_path = os.path.join(save_dir_path, 'dst-tokenizer.json')
-    model_weights_save_file_path = os.path.join(save_dir_path, 'simple_transformer_model_weights.pth')
+    model_weights_save_file_path = os.path.join(save_dir_path, 'simple-transformer-model-weights.pth')
 
     dataset_dir_path = os.path.join(script_dir_path, 'dataset')
 
     src_tokenizer = Tokenizer.from_file(src_tokenizer_save_file_path)
     dst_tokenizer = Tokenizer.from_file(dst_tokenizer_save_file_path)
 
-    src_transform = Lambda(lambda src : torch.tensor(src_tokenizer.encode(src).ids, dtype=torch.long))
-    dst_transform = Lambda(lambda dst : torch.tensor(dst_tokenizer.encode(dst).ids, dtype=torch.long))
+    src_transform = Lambda(lambda src : torch.tensor(src_tokenizer.encode(src).ids, dtype=torch.long).to(device))
+    dst_transform = Lambda(lambda dst : torch.tensor(dst_tokenizer.encode(dst).ids, dtype=torch.long).to(device))
 
     dataset = AlienDataset(dataset_dir_path, subset='train',
                            src_transform=src_transform, dst_transform=dst_transform)
@@ -649,8 +646,7 @@ def check_beam_translate(device: torch.device):
         dataloader = DataLoader(dataset, batch_size=NUM_SAMPLES, shuffle=False, collate_fn=collate_fn)
 
         preds = next(beam_translate(model, dataloader, num_beams=NUM_BEAMS, max_length=MAX_LENGTH))
-        sequences = preds['sequences']
-        scores = preds['sequence_scores']
+        sequences, scores = preds
         for (dst, seq, score) in zip(dataset, sequences, scores):
             dst = dst[1]
             print('actural translation:', dst_tokenizer.decode(dst.tolist()))
@@ -659,11 +655,12 @@ def check_beam_translate(device: torch.device):
             print('-' * 10)
 
 if __name__ == '__main__':
+    # device = torch.device('cpu')
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(device)
 
-    check_positional_encoder(device)
-    check_translation_transformer(device)
-    check_transformer_train_loop(device)
-    check_greed_translate(device)
+    # check_positional_encoder(device)
+    # check_translation_transformer(device)
+    # check_transformer_train_loop(device)
+    # check_greed_translate(device)
     check_beam_translate(device)
