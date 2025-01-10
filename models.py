@@ -659,8 +659,8 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(device)
 
-    # check_positional_encoder(device)
-    # check_translation_transformer(device)
-    # check_transformer_train_loop(device)
-    # check_greed_translate(device)
+    check_positional_encoder(device)
+    check_translation_transformer(device)
+    check_transformer_train_loop(device)
+    check_greed_translate(device)
     check_beam_translate(device)
