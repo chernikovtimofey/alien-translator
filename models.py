@@ -9,50 +9,6 @@ from tokenizers import Tokenizer
 from transformers import BeamSearchScorer
 from data import *
 
-class Seq2Seq(nn.Module):
-    def __init__(
-        self, num_src_tokens: int, num_tgt_tokens: int,
-        src_embedding_size: int, tgt_embedding_size: int,
-        hidden_size: int, num_layers: int = 1, dropout: int = 0, 
-    ):
-        super().__init__()
-
-        self.num_src_tokens = num_src_tokens
-        self.num_tgt_tokens = num_tgt_tokens
-
-        self.inp_embedding = nn.Embedding(num_src_tokens, src_embedding_size)
-        self.tgt_embedding = nn.Embedding(num_tgt_tokens, tgt_embedding_size)
-
-        self.encoder = nn.LSTM(
-            src_embedding_size,
-            hidden_size=hidden_size, 
-            num_layers=num_layers,
-            batch_first=True,
-            dropout=dropout,
-            dtype=torch.float
-        )
-
-        self.decoder = nn.LSTM(
-            tgt_embedding_size,
-            hidden_size=hidden_size, 
-            num_layers=num_layers,
-            batch_first=True,
-            dropout=dropout,
-            dtype=torch.float
-        )
-
-        self.output_layer = nn.Linear(hidden_size, num_tgt_tokens, dtype=torch.float)
-
-    def forward(self, inp: torch.Tensor, tgt: torch.Tensor):
-        inp = self.inp_embedding(inp)
-        tgt = self.tgt_embedding(tgt)
-
-        _, hidden = self.encoder(inp)
-        output, hidden = self.decoder(tgt, hidden)
-        output = self.output_layer(output)
-
-        return output
-
 class PositionalEncoder(nn.Module):
     """Module that encodes information about position into embedding."""
 
@@ -441,52 +397,6 @@ def beam_translate(
             result['sequence_scores'] = final_seqs['sequence_scores']
             yield result
 
-def check_seq2seq(device: torch.device):
-    print('Check Seq2Seq:')
-
-    SUBSET = 'train'
-    VOCABULARY_SIZE = 6000
-
-    script_dir_path = os.path.dirname(__file__)
-
-    dataset_dir_path = os.path.join(script_dir_path, 'dataset')
-    save_dir_path = os.path.join(script_dir_path, 'saved')
-    src_tokenizer_save_file_path = os.path.join(save_dir_path, 'src-tokenizer.json')
-    dst_tokenizer_save_file_path = os.path.join(save_dir_path, 'dst-tokenizer.json')
-
-    src_tokenizer = Tokenizer.from_file(src_tokenizer_save_file_path)
-    dst_tokenizer = Tokenizer.from_file(dst_tokenizer_save_file_path)
-
-    src_transform = Lambda(lambda src : torch.tensor(src_tokenizer.encode(src).ids))
-    dst_transform = Lambda(lambda dst : torch.tensor(dst_tokenizer.encode(dst).ids))
-
-    dataset = AlienDataset(
-        dataset_dir_path, subset=SUBSET, 
-        src_transform=src_transform, dst_transform=dst_transform
-    )
-
-    batch_sampler = BucketSampler(dataset, is_test=(SUBSET == 'test'), batch_size=4, bucket_size=5, shuffle=False)
-    collate_fn = (lambda sequences : bucket_collate_fn(sequences, is_test=(SUBSET == 'test')))
-    dataloader = DataLoader(dataset, batch_sampler=batch_sampler, collate_fn=collate_fn)
-
-    batch = next(iter(dataloader))
-
-    src, dst = batch
-
-    seq2seq = Seq2Seq(
-        VOCABULARY_SIZE, VOCABULARY_SIZE, 8, 8,
-        hidden_size=32, num_layers=1, dropout=0
-    ).to(device)
-
-    print('input:')
-    print(src)
-    print(dst)
-
-    print('output:')
-    output = seq2seq(src, dst)
-    print(output)
-    print(output.shape)
-
 def check_positional_encoder(device: torch.device):
     print('Check PositionalEcoder:')
 
@@ -558,64 +468,6 @@ def check_translation_transformer(device: torch.device):
     out = transformer(src, dst)
     print(out)
     print(out.shape)
-
-def check_seq2seq_train_loop(device: torch.device):
-    print("Check seq2seq's train_loop:")
-
-    VOCABULARY_SIZE = 6000
-    
-    SRC_EMBEDDING_SIZE = 32
-    TGT_EMBEDDING_SIZE = 32
-    HIDDEN_SIZE = 128
-    NUM_LAYERS = 1
-    DROPOUT = 0
-
-    NUM_SAMPLES = 10
-
-    LEARNING_RATE = 0.01
-    NUM_EPOCHS = 150
-
-    script_dir_path = os.path.dirname(__file__)
-
-    save_dir_path = os.path.join(script_dir_path, 'saved')
-
-    src_tokenizer_save_file_path = os.path.join(save_dir_path, 'src-tokenizer.json')
-    dst_tokenizer_save_file_path = os.path.join(save_dir_path, 'dst-tokenizer.json')
-    simple_model_weights_save_file_path = os.path.join(save_dir_path, 'simple_seq2seq_model_weights.pth')
-
-    dataset_dir_path = os.path.join(script_dir_path, 'dataset')
-
-    src_tokenizer = Tokenizer.from_file(src_tokenizer_save_file_path)
-    dst_tokenizer = Tokenizer.from_file(dst_tokenizer_save_file_path)
-
-    src_transform = Lambda(lambda src : torch.tensor(src_tokenizer.encode(src).ids, dtype=torch.long))
-    dst_transform = Lambda(lambda dst : torch.tensor(dst_tokenizer.encode(dst).ids, dtype=torch.long))
-
-    dataset = AlienDataset(
-        dataset_dir_path, subset='train',
-        src_transform=src_transform, dst_transform=dst_transform
-    )
-    dataset = Subset(dataset, range(NUM_SAMPLES))
-
-    collate_fn = (lambda sequences : bucket_collate_fn(sequences, is_test=False))
-    dataloader = DataLoader(dataset, batch_size=NUM_SAMPLES, shuffle=True, collate_fn=collate_fn)
-
-    model = Seq2Seq(
-        VOCABULARY_SIZE, VOCABULARY_SIZE,
-        SRC_EMBEDDING_SIZE, TGT_EMBEDDING_SIZE,
-        hidden_size=HIDDEN_SIZE, num_layers=NUM_LAYERS, dropout=DROPOUT
-    ).to(device)
-
-    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
-
-    loss_fn = nn.CrossEntropyLoss()
-
-    for epoch in range(1, NUM_EPOCHS + 1):
-        train_loss = train_loop(model, dataloader, optimizer, loss_fn, verbose=False)
-
-        print(f'Epoch {epoch:3} training loss: {train_loss:.4f}')
-
-    torch.save(model.state_dict(), simple_model_weights_save_file_path)
 
 def check_transformer_train_loop(device: torch.device):
     print("Check transformer's train_loop:")
@@ -808,11 +660,10 @@ def check_beam_translate(device: torch.device):
 
 if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(device)
 
-    check_seq2seq(device)
     check_positional_encoder(device)
     check_translation_transformer(device)
-    check_seq2seq_train_loop(device)
     check_transformer_train_loop(device)
     check_greed_translate(device)
     check_beam_translate(device)
