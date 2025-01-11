@@ -43,21 +43,21 @@ class TranslationTransformer(nn.Module):
     """Wrapper of PyTorch's Transformer model for translation."""
 
     def __init__(self, num_src_tokens: int, num_tgt_tokens: int, 
-                 d_model: int = 512, nhead: int = 8, 
-                 num_encoder_layers: int = 6, num_decoder_layers: int = 6, 
-                 dim_feedforward: int = 2048, dropout: float = 0.1):
+                 d_model, nhead, 
+                 num_encoder_layers, num_decoder_layers, 
+                 dim_feedforward, dropout):
         """
         Initializes all necessary modules.
 
         Args:
             num_src_tokens (int): Number of tokens of src sequence.
             num_tgt_tokens (int): Number of tokens of tgt sequence.
-            d_model (int, optional): The number of expected features in the encoder/decoder inputs. Defaults to 512.
-            nhead (int, optional): The number of heads in the multiheadattention models. Defaults to 8.
-            num_encoder_layers (int, optional): The number of sub-encoder-layers in the encoder. Defaults to 6.
-            num_decoder_layers (int, optional): The number of sub-decoder-layers in the decoder. Defaults to 6.
-            dim_feedforward (int, optional): The dimension of the feedforward network model. Defaults to 2048.
-            dropout (int, optional): The dropout value. Defaults to 0.1.
+            d_model (int): The number of expected features in the encoder/decoder inputs.
+            nhead (int): The number of heads in the multiheadattention models.
+            num_encoder_layers (int): The number of sub-encoder-layers in the encoder.
+            num_decoder_layers (int): The number of sub-decoder-layers in the decoder.
+            dim_feedforward (int): The dimension of the feedforward network model. 
+            dropout (int): The dropout value. 
         """
 
         MAX_LEN = 500
@@ -126,11 +126,11 @@ class TranslationTransformer(nn.Module):
             device (Union[torch.device, str]): Device to put the returned mask on. Defaults to CPU.
 
         Returns:
-            torch.Tensor.
+            torch.Tensor
         """
 
         return (sequences == pad_token_id).to(device)
-    
+
 def train_loop(
         model: nn.Module, dataloader: DataLoader, optimizer: torch.optim.Optimizer, 
         loss_fn: nn.Module, verbose: bool = False
@@ -142,14 +142,13 @@ def train_loop(
         model (nn.Module): The model to train.
         dataloader (DataLoader): Dataloader to train on.
         optimizer (torch.optim.Optimizer): Optimizer to train a model.
-        loss_fn (nn.Module): The loss function to compute the training loss.
+        loss_fn (nn.Module): A loss function to compute the training loss.
         verbose (bool): Whether to show the training process.
 
     Returns:
         float: An average loss of training all the batches.
     """
 
-    device = next(model.parameters()).device
     dataset_size = len(dataloader.dataset)
 
     model.train()
@@ -157,9 +156,6 @@ def train_loop(
     total_loss = 0
     dataset_processed_size = 0
     for batch_num, (src, tgt) in enumerate(dataloader, start=1):
-        src = src.to(device)
-        tgt = tgt.to(device)
-
         input_tgt = tgt[:, :-1]
         target_tgt = tgt[:, 1:]
 
@@ -185,23 +181,18 @@ def validation_loop(model: nn.Module, dataloader: DataLoader, loss_fn: nn.Module
 
     Args:
         model (nn.Module): The model to get scores.
-        dataloader (DataLoader): Dataloader on which we want to compute average loss.
-        loss_fn (nn.Module): The loss function.
+        dataloader (DataLoader): Dataloader on which we want to compute the average loss.
+        loss_fn (nn.Module): A loss function.
 
     Returns:
         float: An average loss.
     """
-
-    device = next(model.parameters()).device
 
     model.eval()
 
     total_loss = 0
     with torch.no_grad():
         for (src, tgt) in dataloader:
-            src = src.to(device)
-            tgt = tgt.to(device)
-
             input_tgt = tgt[:, :-1]
             target_tgt = tgt[:, 1:]
 
@@ -216,7 +207,7 @@ def fit(
         model: nn.Module, train_dataloader: DataLoader, val_dataloader: DataLoader, 
         optimizer: torch.optim.Optimizer, loss_fn: torch.nn.Module, num_epochs: int, 
         lr_scheduler: torch.optim.lr_scheduler._LRScheduler = None,
-        verbose: bool = False, save_file_path: str = './saved/model-weights.pth'
+        verbose: bool = False, save_file_path: str = 'saved/model-weights.pth'
 ):
     """
     Performs model training on given dataloader.
@@ -226,11 +217,11 @@ def fit(
         train_dataloader (DataLoader): A dataloader to fit.
         val_dataloader (DataLoader): A dataloader to validate.
         optimizer (torch.optim.Optimizer): An optimizer of model's parameters.
-        loss_fn (torch.nn.Module): The loss function to compute the training loss.
+        loss_fn (torch.nn.Module): A loss function to compute the training loss.
         num_epochs (int): Number of epochs to perform.
         lr_scheduler (torch.optim.lr_scheduler._LRScheduler): Learning rate scheduler. Defaults to None.
         verbose (bool, optional): Whether to show the training process. Defaults to False.
-        save_file_path (str, optional): A file path to save model parameters after every epoch. Defaults to './saved/model_weights.pth'.
+        save_file_path (str, optional): A file path to save model parameters after every epoch. Defaults to 'saved/model_weights.pth'.
 
     Returns:
         Tuple[List[float], List[float]]: Training loss history and validation loss history.
@@ -251,9 +242,9 @@ def fit(
         val_loss_hist.append(val_loss)
 
         if verbose:
-            print(f'Training loss: {train_loss:.4f}')
-            print(f'Validation loss: {val_loss:.4f}')
-            print(f'Next learning rate: {lr_scheduler.get_last_lr()[0]:.8f}')
+            print(f'Training loss: {train_loss:>7f}')
+            print(f'Validation loss: {val_loss:>7f}')
+            print(f'Next learning rate: {lr_scheduler.get_last_lr()[0]:>8f}')
 
     return train_loss_hist, val_loss_hist
 
@@ -265,8 +256,8 @@ def greed_translate(
     Performs greedy search to tranlate the sequence.
 
     Args:
-    model (nn.Module): The model used for translation.
-    srcs (Iterable[torch.Tensor]): The batches to translate.
+    model (nn.Module): A model used for translation.
+    srcs (Iterable[torch.Tensor]): Batches to translate.
     max_length (int, optional): Maximum length of tranlation sequence. Defaults to 50.
     pad_token_id (int, optional): [PAD] token id. Defaults to 0.
     bos_token_id (int, optional): [BOS] token id. Defaults to 2.
@@ -275,7 +266,7 @@ def greed_translate(
     Returns:
         list[tuple]: A list of translation sequences and scores for each batch. Each tuple contains:
             - torch.Tensor: translation of sequences.
-            - float: scores of translations.
+            - torch.Tensor: scores of translations.
     """
 
     model.eval()
@@ -318,12 +309,17 @@ def beam_translate(
 
     Args:
         model (nn.Module): The model used for translation.
-        srcs (Iterable[torch.Tensor]): The batches to translate.
+        srcs (Iterable[torch.Tensor]): The src batches.
         num_beams (int, optional): Number of beam hypothesis to keep track on. Defaults to 10.
         max_length (int, optional): Maximum length of tranlation sequence. Defaults to 30.
         pad_token_id (int, optional): [PAD] token id. Defaults to 0.
         bos_token_id (int, optional): [BOS] token id. Defaults to 2.
         eos_token_id (int, optional): [EOS] token id. Defaults to 3.
+
+    Returns:
+        list[tuple]: A list of translation sequences and scores for each batch. Each tuple contains:
+            - torch.Tensor: translation of sequences.
+            - torch.Tensor: scores of translations.
     """
 
     model.eval()
@@ -387,12 +383,12 @@ def beam_translate(
                 if step != max_length:
                     tgt = torch.hstack((tgt[next_token_beams], next_token_ids.view(-1, 1)))
 
-            final_seqs = beam_scorer.finalize(
+            final_seq = beam_scorer.finalize(
                 tgt, beam_scores, next_token_ids, next_beam_ids, max_length,
                 pad_token_id=pad_token_id, eos_token_id=eos_token_id
             )
             
-            yield final_seqs['sequences'], final_seqs['sequence_scores']
+            yield final_seq['sequences'], final_seq['sequence_scores']
 
 def check_positional_encoder(device: torch.device):
     print('Check PositionalEcoder:')
@@ -424,7 +420,7 @@ def check_translation_transformer(device: torch.device):
     print('Check TranslationTransformer:')
 
     SUBSET = 'train'
-    VOCABULARY_SIZE = 6000
+    VOCABULARY_SIZE = 5000
 
     script_dir_path = os.path.dirname(__file__)
 
@@ -454,7 +450,8 @@ def check_translation_transformer(device: torch.device):
 
     transformer = TranslationTransformer(
         VOCABULARY_SIZE, VOCABULARY_SIZE, 
-        d_model=16, nhead=2, num_encoder_layers=2, num_decoder_layers=2, dim_feedforward=64
+        d_model=16, nhead=2, num_encoder_layers=2, num_decoder_layers=2, 
+        dim_feedforward=64, dropout=0
     ).to(device)
 
     print('input:')
@@ -469,7 +466,7 @@ def check_translation_transformer(device: torch.device):
 def check_transformer_train_loop(device: torch.device):
     print("Check transformer's train_loop:")
 
-    VOCABULARY_SIZE = 6000
+    VOCABULARY_SIZE = 5000
 
     D_MODEL = 32
     N_HEAD = 1
@@ -525,14 +522,14 @@ def check_transformer_train_loop(device: torch.device):
         for epoch in range(1, NUM_EPOCHS + 1):
             train_loss = train_loop(model, dataloader, optimizer, loss_fn, verbose=False)
 
-            print(f'Epoch {epoch:3} training loss: {train_loss:.4f}')
+            print(f'Epoch {epoch:>3} training loss: {train_loss:>.4f}')
 
         torch.save(model.state_dict(), simple_model_weights_save_file_path)
 
 def check_greed_translate(device: torch.device):
     print('Check greed_translate:')
 
-    VOCABULARY_SIZE = 6000
+    VOCABULARY_SIZE = 5000
 
     D_MODEL = 32
     N_HEAD = 1
@@ -582,8 +579,7 @@ def check_greed_translate(device: torch.device):
         collate_fn = (lambda sequences : bucket_collate_fn(sequences, is_test=False)[0])
         dataloader = DataLoader(dataset, batch_size=NUM_SAMPLES, shuffle=False, collate_fn=collate_fn)
 
-        preds = next(greed_translate(model, dataloader, max_length=MAX_LENGTH))
-        seqs, scores = preds
+        seqs, scores = next(greed_translate(model, dataloader, max_length=MAX_LENGTH))
         for (dst, seq, score) in zip(dataset, seqs, scores):
             dst = dst[1]
             print('actural translation:', dst_tokenizer.decode(dst.tolist()))
@@ -594,7 +590,7 @@ def check_greed_translate(device: torch.device):
 def check_beam_translate(device: torch.device):
     print('Check beam_translate:')
 
-    VOCABULARY_SIZE = 6000
+    VOCABULARY_SIZE = 5000
 
     D_MODEL = 32
     N_HEAD = 1
@@ -644,9 +640,8 @@ def check_beam_translate(device: torch.device):
         collate_fn = (lambda sequences : bucket_collate_fn(sequences, is_test=False)[0])
         dataloader = DataLoader(dataset, batch_size=NUM_SAMPLES, shuffle=False, collate_fn=collate_fn)
 
-        preds = next(beam_translate(model, dataloader, num_beams=NUM_BEAMS, max_length=MAX_LENGTH))
-        sequences, scores = preds
-        for (dst, seq, score) in zip(dataset, sequences, scores):
+        seqs, scores = next(beam_translate(model, dataloader, num_beams=NUM_BEAMS, max_length=MAX_LENGTH))
+        for (dst, seq, score) in zip(dataset, seqs, scores):
             dst = dst[1]
             print('actural translation:', dst_tokenizer.decode(dst.tolist()))
             print('beam translation:', dst_tokenizer.decode(seq.tolist()))
@@ -654,7 +649,6 @@ def check_beam_translate(device: torch.device):
             print('-' * 10)
 
 if __name__ == '__main__':
-    # device = torch.device('cpu')
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(device)
 

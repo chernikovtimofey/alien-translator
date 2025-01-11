@@ -2,6 +2,7 @@ import os
 import json
 import random
 from typing import Callable
+from typing import Iterable
 from typing import Union
 from tokenizers import Tokenizer
 from tokenizers import normalizers
@@ -17,12 +18,12 @@ from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 from torchvision.transforms import Lambda
 
-def make_src_tokenizer(srcs: list[str], vocab_size: int, show_progress: bool = False):
+def make_src_tokenizer(srcs: Iterable[str], vocab_size: int, show_progress: bool = False):
     """
     Makes WordPiece tokenizer for src strings.
 
     Args:
-        srcs (list[str]): A list of src strings.
+        srcs (Iterable[str]): An iterator of src strings.
         vocab_size (int): The size of the final vocabulary, including all tokens and alphabet.
         show_progress (bool, optional): Whether to show progress bars while training.
 
@@ -47,12 +48,12 @@ def make_src_tokenizer(srcs: list[str], vocab_size: int, show_progress: bool = F
 
     return tokenizer
 
-def make_dst_tokenizer(dsts: list[str], vocab_size: int, show_progress: bool = False):
+def make_dst_tokenizer(dsts: Iterable[str], vocab_size: int, show_progress: bool = False):
     """
     Makes WordPiece tokenizer for dst strings.
 
     Args:
-        dsts (list[str]): A list of dst strings.
+        dsts (Iterable[str]): An iterator of src strings.
         vocab_size (int): The size of the final vocabulary, including all tokens and alphabet.
         show_progress (bool, optional): Whether to show progress bars while training.
 
@@ -216,7 +217,7 @@ def bucket_collate_fn(
         padding_value (int, optional): Value for padded elements. Defaults to 0.
 
     Returns:
-        torch.Tensor: Batch of sequences.
+        torch.Tensor: Batch of the sequences.
     """
 
     if is_test:
@@ -229,11 +230,11 @@ def bucket_collate_fn(
 def check_make_src_tokenizer():
     print('Check make_src_tokenizer:')
 
-    VOCABULARY_SIZE = 6000
+    VOCABULARY_SIZE = 5000
 
     script_dir_path = os.path.dirname(__file__)
 
-    dataset_file_path = os.path.join(script_dir_path, 'dataset/train')
+    dataset_file_path = os.path.join(script_dir_path, 'cleared-dataset/train')
 
     save_dir_path = os.path.join(script_dir_path, 'saved')
     tokenizer_save_file_path = os.path.join(save_dir_path, 'src-tokenizer.json')
@@ -262,11 +263,11 @@ def check_make_src_tokenizer():
 def check_make_dst_tokenizer():
     print('Check make_dst_tokenizer:')
 
-    VOCABULARY_SIZE = 6000
+    VOCABULARY_SIZE = 5000
 
     script_dir_path = os.path.dirname(__file__)
 
-    dataset_file_path = os.path.join(script_dir_path, 'dataset/train')
+    dataset_file_path = os.path.join(script_dir_path, 'cleared-dataset/train')
 
     save_dir_path = os.path.join(script_dir_path, 'saved')
     tokenizer_save_file_path = os.path.join(save_dir_path, 'dst-tokenizer.json')
