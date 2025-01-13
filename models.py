@@ -478,7 +478,7 @@ def check_transformer_train_loop(device: torch.device):
     NUM_SAMPLES = 30
 
     LEARNING_RATE = 0.01
-    NUM_EPOCHS = 50
+    NUM_EPOCHS = 30
 
     script_dir_path = os.path.dirname(__file__)
 

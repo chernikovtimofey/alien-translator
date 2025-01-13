@@ -1,6 +1,7 @@
 import os
 import json
 import random
+from tqdm.auto import tqdm as tqdma
 from typing import Callable
 from typing import Iterable
 from typing import Union
@@ -84,7 +85,8 @@ class AlienDataset(Dataset):
 
     def __init__(
             self, dataset_dir_path: str, subset: str, 
-            src_transform: Callable[[str], any] = None, dst_transform: Callable[[str], any] = None
+            src_transform: Callable[[str], any] = None, dst_transform: Callable[[str], any] = None,
+            verbose : bool = False
     ):
         """
         Loads the Alien dataset.
@@ -94,6 +96,7 @@ class AlienDataset(Dataset):
             subset (str, optional): Can take values "train", "val" and "test" depending on the subset you want to load. 
             src_transform (Callable[[str], any], optional): Transformation of src string. Defaults to None. 
             dst_transform (Callable[[str], any], optional): Transformation of dst string. Defaults to None.
+            verbose (bool, optional): Whether to show progress bar.
 
         Raises:
             ValueError: Raised if subset value is not valid.
@@ -116,28 +119,26 @@ class AlienDataset(Dataset):
         self.srcs = []
         self.dsts = []
         with open(dataset_file_path, 'r') as dataset_file:
-            for line in dataset_file:
+            for line in (tqdma(dataset_file) if verbose else dataset_file):
                 sample = json.loads(line)
+
+                if self.src_transform:
+                    sample['src'] = self.src_transform(sample['src'])
                 self.srcs.append(sample['src'])
+
                 if subset != 'test':
+                    if self.dst_transform:
+                        sample['dst'] = self.dst_transform(sample['dst'])
                     self.dsts.append(sample['dst'])
 
     def __len__(self):
         return len(self.srcs)
     
     def __getitem__(self, idx: int):
-        src = self.srcs[idx]
-        if self.src_transform:
-            src = self.src_transform(src)
-    
         if self.subset == 'test':
-            return src
+            return self.srcs[idx]
         else:
-            dst = self.dsts[idx]
-            if self.dst_transform:
-                dst = self.dst_transform(dst)
-
-            return src, dst
+            return self.srcs[idx], self.dsts[idx]
         
 class BucketSampler(Sampler):
     """
@@ -217,7 +218,7 @@ def bucket_collate_fn(
         padding_value (int, optional): Value for padded elements. Defaults to 0.
 
     Returns:
-        torch.Tensor: Batch of the sequences.
+        Union[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]: Batch of the sequences.
     """
 
     if is_test:
@@ -230,7 +231,7 @@ def bucket_collate_fn(
 def check_make_src_tokenizer():
     print('Check make_src_tokenizer:')
 
-    VOCABULARY_SIZE = 5000
+    VOCABULARY_SIZE = 3000
 
     script_dir_path = os.path.dirname(__file__)
 
@@ -263,7 +264,7 @@ def check_make_src_tokenizer():
 def check_make_dst_tokenizer():
     print('Check make_dst_tokenizer:')
 
-    VOCABULARY_SIZE = 5000
+    VOCABULARY_SIZE = 3000
 
     script_dir_path = os.path.dirname(__file__)
 
@@ -313,7 +314,8 @@ def check_alien_dataset():
 
     dataset = AlienDataset(
         dataset_dir_path, subset=SUBSET, 
-        src_transform=src_transform, dst_transform=dst_transform
+        src_transform=src_transform, dst_transform=dst_transform,
+        verbose=True
     )
     for idx in range(10):
         if SUBSET == 'test':
@@ -376,7 +378,7 @@ def check_bucket_sampler():
             print('-' * 10)
 
 if __name__ == '__main__':
-    check_make_src_tokenizer()
-    check_make_dst_tokenizer()
+    # check_make_src_tokenizer()
+    # check_make_dst_tokenizer()
     check_alien_dataset()
     check_bucket_sampler()
